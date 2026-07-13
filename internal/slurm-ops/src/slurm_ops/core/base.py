@@ -23,6 +23,7 @@ import base64
 import datetime
 import json
 import logging
+import platform
 import secrets
 import shutil
 import socket
@@ -36,7 +37,6 @@ from subprocess import CalledProcessError
 from typing import Any, Protocol
 from uuid import uuid4
 
-import distro
 import yaml
 from charmed_hpc_libs.errors import SnapError, SystemdError
 from charmed_hpc_libs.ops import (
@@ -205,7 +205,7 @@ class _AptManager(OpsManager):
                 enabled=True,
                 repotype="deb",
                 uri=uri,
-                release=distro.codename(),
+                release=platform.freedesktop_os_release().get("VERSION_CODENAME", ""),
                 groups=["main"],
             )
             ppa.import_key(UBUNTU_HPC_PPA_KEY)

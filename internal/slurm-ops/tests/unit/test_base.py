@@ -138,7 +138,10 @@ class TestAptManager:
         mocker.patch("charmlibs.apt.DebianRepository._get_keyid_by_gpg_key")
         mocker.patch("charmlibs.apt.DebianRepository._dearmor_gpg_key")
         mocker.patch("charmlibs.apt.DebianRepository._write_apt_gpg_keyfile")
-        mocker.patch("distro.codename", return_value="noble")
+        mocker.patch(
+            "platform.freedesktop_os_release",
+            return_value={"VERSION_CODENAME": "noble"},
+        )
 
         # Test that Ubuntu HPC PPA is successfully added to the sources list.
         manager._ops_manager._init_ppa(UBUNTU_HPC_SLURM_PPA_URI)
