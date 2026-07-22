@@ -224,6 +224,8 @@ class TestSlurmctldCharm:
     ) -> None:
         """Test successful integration on the SMTP interface."""
         mock_add_package = mocker.patch.object(apt, "add_package")
+        mocker.patch.object(apt, "DebianRepository")
+        mocker.patch.object(apt, "update")
 
         with mock_charm(
             mock_charm.on.relation_created(smtp_relation),
@@ -244,6 +246,8 @@ class TestSlurmctldCharm:
         """Test integration on the SMTP interface when package installation fails."""
         mock_add_package = mocker.patch.object(apt, "add_package")
         mock_add_package.side_effect = apt.PackageError()
+        mocker.patch.object(apt, "DebianRepository")
+        mocker.patch.object(apt, "update")
 
         with mock_charm(
             mock_charm.on.relation_created(smtp_relation),

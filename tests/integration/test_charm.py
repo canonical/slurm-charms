@@ -298,9 +298,9 @@ def _api_get(juju: jubilant.Juju, unit: str, token: str, url: str) -> tuple[str,
         f" --request GET '{url}'",
         unit=unit,
     )
-    assert (
-        "HTTP_RESPONSE_CODE:" in result.stdout
-    ), f"no status code in response, stdout: {result.stdout} stderr: {result.stderr}"
+    assert "HTTP_RESPONSE_CODE:" in result.stdout, (
+        f"no status code in response, stdout: {result.stdout} stderr: {result.stderr}"
+    )
     body, status_line = result.stdout.strip().rsplit("HTTP_RESPONSE_CODE:", 1)
     return status_line.strip(), body
 
@@ -319,9 +319,9 @@ def test_rotate_jwt_key(juju: jubilant.Juju) -> None:
     cat_cmd = "sudo cat /etc/slurm/jwt_hs256.key"
     initial_key_controller = juju.exec(cat_cmd, unit=slurmctld_unit).stdout
     initial_key_database = juju.exec(cat_cmd, unit=slurmdbd_unit).stdout
-    assert (
-        initial_key_controller == initial_key_database
-    ), "initial JWT key on controller and database differ"
+    assert initial_key_controller == initial_key_database, (
+        "initial JWT key on controller and database differ"
+    )
 
     # Use sudo to generate token to ensure access to all API endpoints.
     initial_token = juju.exec(
@@ -374,12 +374,12 @@ def test_rotate_jwt_key(juju: jubilant.Juju) -> None:
         with attempt:
             new_key_controller = juju.exec(cat_cmd, unit=slurmctld_unit).stdout
             new_key_database = juju.exec(cat_cmd, unit=slurmdbd_unit).stdout
-            assert (
-                new_key_controller != initial_key_controller
-            ), "JWT key not rotated on controller"
-            assert (
-                new_key_controller == new_key_database
-            ), "JWT key on controller and database differ after rotation"
+            assert new_key_controller != initial_key_controller, (
+                "JWT key not rotated on controller"
+            )
+            assert new_key_controller == new_key_database, (
+                "JWT key on controller and database differ after rotation"
+            )
 
     # Check old token no longer functional after rotation.
     status_code, _ = _api_get(juju, slurmctld_unit, initial_token, diag_urls[0])

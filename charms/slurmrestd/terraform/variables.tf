@@ -19,9 +19,9 @@ variable "app_name" {
 }
 
 variable "base" {
-  description = "Base operating system to use for the deployed application (for example, ubuntu@24.04)."
+  description = "Base operating system to use for the deployed application (for example, ubuntu@26.04)."
   type        = string
-  default     = "ubuntu@24.04"
+  default     = "ubuntu@26.04"
 }
 
 variable "channel" {

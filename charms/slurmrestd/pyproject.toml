@@ -1,11 +1,11 @@
 [project]
 name = "slurmrestd"
 version = "0.0"
-requires-python = "==3.12.*"
+requires-python = "==3.14.*"
 dependencies = [
-    "ops ~= 3.0",
-    "slurmutils<2.0.0,>=1.1.1",
-    "charmed-hpc-libs[ops] >= 0.1.0",
+    "ops",
+    "slurmutils",
+    "charmed-hpc-libs[ops]",
     "charmed-slurm-slurmrestd-interface",
     "slurm-ops"
 ]

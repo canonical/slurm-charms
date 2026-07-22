@@ -48,21 +48,21 @@ def assert_hostname(new: dict, old: dict, mapping: dict):
     for new_key, old_key in mapping.items():
         expected = old[old_key]["hostname"]
         actual = new[new_key]["hostname"]
-        assert (
-            actual == expected
-        ), f"hostname mismatch for {new_key} vs {old_key}: expected '{expected}', got '{actual}'"
+        assert actual == expected, (
+            f"hostname mismatch for {new_key} vs {old_key}: expected '{expected}', got '{actual}'"
+        )
 
 
 def assert_sinfo(sinfo_result: jubilant.Task):
-    assert (
-        sinfo_result.return_code == 0
-    ), f"`sinfo` operation status: '{sinfo_result.status}'\nstdout: {sinfo_result.stdout}\nstderr: {sinfo_result.stderr}"
+    assert sinfo_result.return_code == 0, (
+        f"`sinfo` operation status: '{sinfo_result.status}'\nstdout: {sinfo_result.stdout}\nstderr: {sinfo_result.stderr}"
+    )
 
 
 def assert_powered_off(juju: jubilant.Juju, machine_id, hostname):
-    assert (
-        juju.status().machines[machine_id].juju_status.current == "down"
-    ), f"machine '{hostname}' is not powered off"
+    assert juju.status().machines[machine_id].juju_status.current == "down", (
+        f"machine '{hostname}' is not powered off"
+    )
 
 
 @tenacity.retry(
@@ -104,7 +104,7 @@ def _get_slurm_controllers(juju: jubilant.Juju, query_unit: str = f"{SACKD_APP_N
 
 
 @pytest.mark.order(19)
-def test_slurmctld_ha_deploy(juju: jubilant.Juju) -> None:
+def test_slurmctld_ha_deploy(juju: jubilant.Juju, base: str) -> None:
     """Test deployment of high availability file system and migration of StateSaveLocation data."""
     # Ceph shared storage necessary for all controller instances to share StateSaveLocation data
     juju.deploy(
@@ -117,6 +117,7 @@ def test_slurmctld_ha_deploy(juju: jubilant.Juju) -> None:
         "filesystem-client",
         FILESYSTEM_CLIENT_APP_NAME,
         channel=DEFAULT_FILESYSTEM_CHARM_CHANNEL,
+        base=base,
     )
 
     # Must wait for Microceph to become active before CephFS and proxy can be set up
@@ -226,8 +227,10 @@ def test_slurmctld_scale_down(juju: jubilant.Juju) -> None:
     logger.info("removing backup1 controller")
     juju.remove_unit(controllers["backup1"]["unit"])
     juju.wait(
-        lambda status: len(status.apps[SLURMCTLD_APP_NAME].units) == 2
-        and jubilant.all_active(status, *SLURM_APPS),
+        lambda status: (
+            len(status.apps[SLURMCTLD_APP_NAME].units) == 2
+            and jubilant.all_active(status, *SLURM_APPS)
+        ),
         error=lambda status: jubilant.any_error(status, SLURM_APPS[SLURMCTLD_APP_NAME]),
         timeout=600,
     )
@@ -361,8 +364,9 @@ def test_slurmctld_unit_failover(juju: jubilant.Juju) -> None:
     logger.info("powering off primary machine")
     juju.exec("sudo poweroff", unit=controllers["primary"]["unit"])
     juju.wait(
-        lambda status: status.machines[controllers["primary"]["machine"]].juju_status.current
-        == "down"
+        lambda status: (
+            status.machines[controllers["primary"]["machine"]].juju_status.current == "down"
+        )
     )
 
     logger.info("triggering failover")
@@ -446,8 +450,9 @@ def test_slurmctld_scale_up_degraded(juju: jubilant.Juju) -> None:
     logger.info("powering off primary machine")
     juju.exec("sudo poweroff", unit=controllers["primary"]["unit"])
     juju.wait(
-        lambda status: status.machines[controllers["primary"]["machine"]].juju_status.current
-        == "down"
+        lambda status: (
+            status.machines[controllers["primary"]["machine"]].juju_status.current == "down"
+        )
     )
 
     logger.info("checking primary and backup controllers")
@@ -514,9 +519,9 @@ def test_slurmctld_remove_failed_controller(juju: jubilant.Juju) -> None:
             down.append(unit)
         else:
             not_down.append(unit)
-    assert (
-        len(down) == 1 and len(not_down) == 2
-    ), f"expected 1 down controller and 2 others, got {len(down)} down and {len(not_down)} others"
+    assert len(down) == 1 and len(not_down) == 2, (
+        f"expected 1 down controller and 2 others, got {len(down)} down and {len(not_down)} others"
+    )
 
     down_unit = down[0]
     logger.info("removing failed controller: '%s'", down_unit)

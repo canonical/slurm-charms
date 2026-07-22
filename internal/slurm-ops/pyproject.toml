@@ -19,7 +19,7 @@ description = "Manage Slurm service operations on machines."
 authors = [
     { name = "Ubuntu High-Performance Computing", email = "hpc-ubuntu-group@canonical.com" },
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "charmed-hpc-libs[ops]",
     "charmlibs-apt ~= 1.0",

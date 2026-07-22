@@ -159,13 +159,14 @@ class Repository:
     internal_libraries: list[CharmLibrary]
     public_packages: list[Package]
     private_packages: list[Package]
+    root_pyproject: dict[str, Any]
 
     def __init__(self) -> None:
         """Load the monorepo information."""
         UV.run_command(["lock", "--quiet"])
         try:
             with open(ROOT_DIR / PYPROJECT_FILE, mode="r") as fin:
-                project = rtoml.load(fin)
+                self.root_pyproject = rtoml.load(fin)
         except OSError:
             raise RepositoryError(f"Failed to read file `{ROOT_DIR / PYPROJECT_FILE}`")
 
@@ -175,10 +176,17 @@ class Repository:
         except OSError:
             raise RepositoryError("Failed to read uv.lock file")
 
+        # Store the fully parsed root pyproject.toml so that tooling config (e.g.
+        # `tool.uv.sources`, `tool.uv.dependency-metadata`) can be inherited into
+        # each staged charm's pyproject.toml without duplicating these entries.
+        self.root_pyproject.setdefault("tool", {}).setdefault("uv", {})
+        self.root_pyproject["tool"]["uv"].setdefault("sources", {})
+        self.root_pyproject["tool"]["uv"].setdefault("dependency-metadata", [])
+
         try:
             self.external_libraries = [
                 CharmLibrary.from_charmcraft_lib(entry)
-                for entry in project["tool"]["repository"]["external-libraries"]
+                for entry in self.root_pyproject["tool"]["repository"]["external-libraries"]
             ]
         except KeyError:
             self.external_libraries = []
@@ -203,13 +211,25 @@ class Repository:
                     )
                 )
 
-        self.private_packages = [
-            pkg for path in PRIVATE_PKGS_PATH.iterdir() if (pkg := load_package(path)) is not None
-        ]
+        try:
+            self.private_packages = [
+                pkg
+                for path in PRIVATE_PKGS_PATH.iterdir()
+                if (pkg := load_package(path)) is not None
+            ]
+        except FileNotFoundError:
+            # `PRIVATE_PKGS_PATH` does not exist, so we don't have any private packages.
+            self.private_packages = []
 
-        self.public_packages = [
-            pkg for path in PUBLIC_PKGS_PATH.iterdir() if (pkg := load_package(path)) is not None
-        ]
+        try:
+            self.public_packages = [
+                pkg
+                for path in PUBLIC_PKGS_PATH.iterdir()
+                if (pkg := load_package(path)) is not None
+            ]
+        except FileNotFoundError:
+            # `PUBLIC_PKGS_PATH` does not exist, so we don't have any private packages.
+            self.public_packages = []
 
         self.charms = [
             charm
@@ -343,8 +363,7 @@ def stage_charm(
         shutil.copytree(charm.path, charm.build_path, dirs_exist_ok=True)
 
         # Overrides the charmcraft.yaml instead of editing it. This avoids having
-        # to load two times the same charm metadata to inject the correct value for
-        # charm-binary-python-packages
+        # to load two times the same charm metadata.
         try:
             with open(charm.build_path / CHARMCRAFT_FILE, "wt") as f:
                 yaml.safe_dump(charm.metadata, f, sort_keys=False)
@@ -375,15 +394,22 @@ def stage_charm(
         version_file = Path(charm.build_path / "version")
         version_file.write_text(git_hash)
 
-        for lib in charm.libraries:
-            src = LIBS_CHARM_PATH / "lib" / "charms" / lib.path
-            dest = charm.build_path / "lib" / "charms" / lib.path
-            logger.debug("Copying %s to %s", lib, dest)
-            if not dry_run:
-                copy(src, dest)
+    for lib in charm.libraries:
+        src = LIBS_CHARM_PATH / "lib" / "charms" / lib.path
+        dest = charm.build_path / "lib" / "charms" / lib.path
+        logger.debug("Copying %s to %s", lib, dest)
+        if not dry_run:
+            copy(src, dest)
 
-        with open(charm.build_path / "pyproject.toml", "r") as fin:
+    if not dry_run:
+        with open(charm.build_path / PYPROJECT_FILE, "r") as fin:
             pyproject = rtoml.load(fin)
+
+        # Ensure `tool.uv.sources` and `tool.uv.dependency-metadata` always exist
+        # so we can access them directly.
+        pyproject.setdefault("tool", {}).setdefault("uv", {})
+        pyproject["tool"]["uv"].setdefault("sources", {})
+        pyproject["tool"]["uv"].setdefault("dependency-metadata", [])
 
         for pkg in charm.packages:
             filename = f"{pkg.name.replace('-', '_')}-{pkg.version}.tar.gz"
@@ -405,7 +431,34 @@ def stage_charm(
                 f"{pkg.name} @ file:///${{PROJECT_ROOT}}/dist/{filename}"
             )
 
-        with open(charm.build_path / "pyproject.toml", "wt") as fout:
+        # Inherit `tool.uv.sources` and `tool.uv.dependency-metadata` from the root
+        # pyproject.toml so charms don't need to duplicate them.
+        #
+        # This avoids having to duplicate those properties on every charm, which
+        # could get out of sync if we forget to update those blocks in any of the
+        # charms.
+        root_uv = repository.root_pyproject["tool"]["uv"]
+        inherited_sources = {
+            name: source
+            for name, source in root_uv["sources"].items()
+            # Workspace-member sources are excluded because they're vendored as
+            # `file://` URLs above.
+            if not source.get("workspace", False)
+        }
+        pyproject["tool"]["uv"]["sources"] = {
+            **inherited_sources,
+            **pyproject["tool"]["uv"]["sources"],
+        }
+
+        inherited_dependency_metadata = root_uv["dependency-metadata"]
+        existing_by_name = {
+            entry["name"]: entry for entry in pyproject["tool"]["uv"]["dependency-metadata"]
+        }
+        for entry in inherited_dependency_metadata:
+            existing_by_name.setdefault(entry["name"], entry)
+        pyproject["tool"]["uv"]["dependency-metadata"] = list(existing_by_name.values())
+
+        with open(charm.build_path / PYPROJECT_FILE, "wt") as fout:
             rtoml.dump(pyproject, fout)
 
     logger.info("staged charm %s at %s", charm.path.name, charm.build_path)
@@ -418,10 +471,10 @@ def stage_charms(
     LIBS_CHARM = {
         "name": "libs",
         "type": "charm",
-        "base": "ubuntu@24.04",
+        "base": "ubuntu@26.04",
         "summary": "",
         "description": "",
-        "parts": {"charm": {}},
+        "parts": {"nil": {"plugin": "nil"}},
         "platforms": {"amd64": None},
         "charm-libs": [lib.as_charmcraft_lib() for lib in repository.external_libraries],
     }
@@ -502,7 +555,7 @@ def get_source_dirs(targets: Collection[Charm | Package], include_tests: bool = 
             str(target.path / "src"),
             str(target.path / "tests") if include_tests else "",
         )
-        if file
+        if file and Path(file).exists()
     ]
     return files
 
@@ -682,8 +735,7 @@ def fmt_cli(charms: Collection[Charm], packages: Collection[Package], **kwargs) 
     packages = get_source_dirs(packages)
     files = charms + packages + [str(ROOT_DIR / "tests")]
     logging.info(f"Formatting directories {files} with ruff...")
-    uv_run(["black"] + files, cwd=ROOT_DIR)
-    uv_run(["ruff", "check", "--fix"] + files, cwd=ROOT_DIR)
+    uv_run(["ruff", "format"] + files, cwd=ROOT_DIR)
 
 
 def lint_cli(
@@ -745,6 +797,10 @@ def unit_test_cli(
     files = []
 
     for charm in charms:
+        if not (charm.build_path / "tests").exists():
+            logger.info("charm %s does not contain unit tests. skipping...", charm.name)
+            continue
+
         logger.info("running unit tests for charm %s", charm.name)
         coverage_file = charm.build_path / ".coverage"
         uv_run(
@@ -776,7 +832,7 @@ def unit_test_cli(
 
     for package in packages:
         tests_path = package.path / "tests" / "unit"
-        if not any(tests_path.glob("test_*.py")):
+        if not tests_path.exists() or not any(tests_path.glob("test_*.py")):
             logger.info("skipping unit tests for package %s (no tests found)", package.name)
             continue
         logger.info("running unit tests for package %s", package.name)

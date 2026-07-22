@@ -15,7 +15,7 @@
 [project]
 name = "slurm-charms"
 version = "0.0"
-requires-python = "==3.12.*"
+requires-python = "==3.14.*"
 
 [project.optional-dependencies]
 dev = [
@@ -41,7 +41,7 @@ dev = [
     "psutil ~= 7.0",
     "pydantic ~= 2.0",
     "slurm-ops",
-    "slurmutils<2.0.0,>=1.1.1",
+    "slurmutils<2.0.0,>=1.3.0",
 
     # Tests
     "charmed-hpc-libs[all] >= 0.1.0",
@@ -60,7 +60,6 @@ dev = [
     "tenacity ~= 8.2",
 
     # Linting
-    "black",
     "ruff",
     "codespell",
     "pyright",
@@ -124,12 +123,7 @@ log_cli_level = "INFO"
 [tool.codespell]
 skip = "_build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.pytest_cache,.vscode,.coverage,.venv,cover"
 
-# Formatting tools configuration
-[tool.black]
-line-length = 99
-target-version = ["py312"]
-
-# Linting tools configuration
+# Formatting and linting tools configuration
 [tool.ruff]
 line-length = 99
 lint.select = ["E", "W", "F", "C", "N", "D", "I001"]

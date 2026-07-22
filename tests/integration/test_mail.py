@@ -203,8 +203,10 @@ def test_slurmctld_mail_remove(juju: jubilant.Juju) -> None:
     """Test SMTP integrator application removal and breaking of integration with slurmctld."""
     juju.remove_application(SMTP_INTEGRATOR_APP_NAME)
     juju.wait(
-        lambda status: SMTP_INTEGRATOR_APP_NAME not in status.apps
-        and jubilant.all_active(status, SLURMCTLD_APP_NAME)
+        lambda status: (
+            SMTP_INTEGRATOR_APP_NAME not in status.apps
+            and jubilant.all_active(status, SLURMCTLD_APP_NAME)
+        )
     )
 
 

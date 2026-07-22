@@ -1,11 +1,11 @@
 [project]
 name = "sackd"
 version = "0.0"
-requires-python = "==3.12.*"
+requires-python = "==3.14.*"
 dependencies = [
-    "ops ~= 3.0",
-    "charmed-hpc-libs[ops] >= 0.1.0",
-    "cosl ~= 1.0",
+    "ops",
+    "charmed-hpc-libs[ops]",
+    "cosl",
     "charmed-slurm-sackd-interface",
     "slurm-ops"
 ]

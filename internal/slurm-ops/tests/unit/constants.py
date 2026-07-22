@@ -66,14 +66,16 @@ cYJxcwKBgQCK+dW+F0UJTQq1rDxfI0rt6yuRnhtSdAq2+HbXNx/0nwdLQg7SubWe
 -----END RSA PRIVATE KEY-----
 """
 
-SLURM_APT_INFO = Template(textwrap.dedent("""
+SLURM_APT_INFO = Template(
+    textwrap.dedent("""
         Desired=Unknown/Install/Remove/Purge/Hold
         | Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend
         |/ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)
         ||/ Name           Version          Architecture Description
         +++-==============-================-============-=================================
         ii  $service       23.11.7-2ubuntu1 amd64        SLURM daemon
-        """))
+        """)
+)
 
 SLURM_SNAP_INFO_ACTIVE = """
 name:      slurm

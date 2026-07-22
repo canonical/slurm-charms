@@ -55,7 +55,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        bases: [ubuntu@24.04]
+        bases: [ubuntu@26.04]
     # xlarge runner used for nightly and HA-enabled tests. Standard ubuntu runner otherwise
     runs-on: ${{ (github.event_name == 'schedule' || inputs.enable_ha) && 'self-hosted-linux-amd64-noble-xlarge' || 'ubuntu-26.04' }}
     steps:

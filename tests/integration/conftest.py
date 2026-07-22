@@ -162,7 +162,7 @@ def pytest_addoption(parser) -> None:
     parser.addoption(
         "--charm-base",
         action="store",
-        default="ubuntu@24.04",
+        default="ubuntu@26.04",
         help="the base to deploy the slurm charms on during the integration tests",
     )
     parser.addoption(

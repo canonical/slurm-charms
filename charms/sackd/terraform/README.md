@@ -19,7 +19,7 @@ for the Juju Terraform provider.
 | Name          | Type        | Description                                                              | Default          | Required |
 |---------------|-------------|--------------------------------------------------------------------------|------------------|:--------:|
 | `app_name`    | string      | Name of the Juju application deployed from this charm.                   | `"sackd"`        |          |
-| `base`        | string      | Base operating system to use for the deployed application.               | `"ubuntu@24.04"` |          |
+| `base`        | string      | Base operating system to use for the deployed application.               | `"ubuntu@26.04"` |          |
 | `channel`     | string      | Channel of the charm to deploy from.                                     | `"latest/edge"`  |          |
 | `config`      | map(string) | Map of charm configuration options.                                      | `{}`             |          |
 | `constraints` | string      | Constraints to apply to the deployed application.                        | `null`           |          |

@@ -21,13 +21,19 @@ from time import sleep
 
 import jubilant
 import pytest
-from constants import APPTAINER_APP_NAME, SACKD_APP_NAME, SLURMCTLD_APP_NAME, SLURMD_APP_NAME
+from constants import (
+    APPTAINER_APP_NAME,
+    DEFAULT_APPTAINER_CHARM_CHANNEL,
+    SACKD_APP_NAME,
+    SLURMCTLD_APP_NAME,
+    SLURMD_APP_NAME,
+)
 from dotenv import dotenv_values
 
 logger = logging.getLogger(__name__)
 
 
-def setup_apptainer(juju: jubilant.Juju) -> None:
+def setup_apptainer(juju: jubilant.Juju, base: str) -> None:
     """Deploy and integrate `apptainer` with `slurmctld` and `slurmd`.
 
     Notes:
@@ -35,7 +41,7 @@ def setup_apptainer(juju: jubilant.Juju) -> None:
           to give the cluster enough time to reconfigure.
     """
     logger.info("deploy '%s'", APPTAINER_APP_NAME)
-    juju.deploy(APPTAINER_APP_NAME, channel="latest/edge")
+    juju.deploy(APPTAINER_APP_NAME, channel=DEFAULT_APPTAINER_CHARM_CHANNEL, base=base)
 
     logger.info(
         "integration '%s' application with '%s' application",
@@ -55,10 +61,10 @@ def setup_apptainer(juju: jubilant.Juju) -> None:
 
 
 @pytest.mark.order(13)
-def test_apptainer_oci_scheduling(juju: jubilant.Juju) -> None:
+def test_apptainer_oci_scheduling(juju: jubilant.Juju, base: str) -> None:
     """Test that Slurm can schedule jobs using Apptainer."""
     if APPTAINER_APP_NAME not in juju.status().apps:
-        setup_apptainer(juju)
+        setup_apptainer(juju, base)
 
     sackd_unit = f"{SACKD_APP_NAME}/0"
     slurmd_unit = f"{SLURMD_APP_NAME}/0"

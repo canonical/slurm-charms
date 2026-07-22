@@ -34,6 +34,7 @@ INFLUXDB_APP_NAME = "influxdb"
 APPTAINER_APP_NAME = "apptainer"
 
 DEFAULT_FILESYSTEM_CHARM_CHANNEL = "latest/edge"
+DEFAULT_APPTAINER_CHARM_CHANNEL = "latest/edge"
 MICROCEPH_APP_NAME = "microceph"
 CEPHFS_SERVER_PROXY_APP_NAME = "cephfs-server-proxy"
 FILESYSTEM_CLIENT_APP_NAME = "checkpoint"

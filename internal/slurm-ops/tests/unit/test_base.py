@@ -17,7 +17,7 @@
 
 import stat
 from pathlib import Path
-from subprocess import CalledProcessError, CompletedProcess
+from subprocess import CompletedProcess
 
 import pytest
 from charmlibs import apt
@@ -38,7 +38,6 @@ from slurm_ops import (
     SlurmrestdManager,
 )
 from slurm_ops.core import SlurmManager
-from slurm_ops.core.base import UBUNTU_HPC_SLURM_PPA_URI  # noqa
 
 services = ["sackd", "slurmctld", "slurmd", "slurmdbd", "slurmrestd"]
 
@@ -73,7 +72,6 @@ class TestAptManager:
     def test_install(self, mock_manager, mocker: MockerFixture) -> None:
         """Test the `install` method."""
         manager, _ = mock_manager
-        mocker.patch("slurm_ops.core.base._AptManager._init_ppa")
         mocker.patch("slurm_ops.core.base._AptManager._install_service")
         mocker.patch("slurm_ops.core.base._AptManager._apply_overrides")
         mocker.patch("shutil.chown")
@@ -132,43 +130,6 @@ class TestAptManager:
 
         assert manager.is_installed() is False
 
-    def test_init_ubuntu_hpc_ppa(self, mock_manager, mocker: MockerFixture, mock_run) -> None:
-        """Test the `_init_ubuntu_hpc_ppa` helper method."""
-        manager, _ = mock_manager
-        mocker.patch("charmlibs.apt.DebianRepository._get_keyid_by_gpg_key")
-        mocker.patch("charmlibs.apt.DebianRepository._dearmor_gpg_key")
-        mocker.patch("charmlibs.apt.DebianRepository._write_apt_gpg_keyfile")
-        mocker.patch("distro.codename", return_value="noble")
-
-        # Test that Ubuntu HPC PPA is successfully added to the sources list.
-        manager._ops_manager._init_ppa(UBUNTU_HPC_SLURM_PPA_URI)
-        expected = [
-            "add-apt-repository",
-            "--yes",
-            (
-                "--sourceslist="
-                + "deb https://ppa.launchpadcontent.net/ubuntu-hpc/slurm-wlm-25.11/ubuntu noble main"
-            ),
-            "--no-update",
-        ]
-        # The first call of `mock_run` is sometimes `lsb_release -a` and not
-        # `add-apt-repository ...`. Tried using `ripgrep` to find where `lsb_release -a` is called,
-        # and why it is only called occasionally, but not results came up.
-        assert (
-            mock_run.call_args_list[1][0][0] == expected
-            or mock_run.call_args_list[0][0][0] == expected
-        )
-
-        # Test that a `SlurmOpsError` is raised if an error occurs when adding the Ubuntu HPC PPA.
-        mock_run.side_effect = CalledProcessError(
-            cmd="add-apt-repository --yes --sourceslist=...",
-            returncode=1,
-            stderr=b"failed to add ppa",
-            output=b"",
-        )
-        with pytest.raises(SlurmOpsError):
-            manager._ops_manager._init_ppa(UBUNTU_HPC_SLURM_PPA_URI)
-
     def test_set_ulimit(self, mock_manager) -> None:
         """Test the `_set_ulimit` helper method."""
         manager, _ = mock_manager
@@ -183,6 +144,7 @@ class TestAptManager:
         """Test the `_install_service` helper method."""
         manager, service = mock_manager
         mock_add_package = mocker.patch.object(apt, "add_package")
+        mock_update = mocker.patch.object(apt, "update")
 
         # Test that the correct packages are installed based on the Slurm service being managed.
         manager._ops_manager._install_service()
@@ -212,6 +174,7 @@ class TestAptManager:
                     "slurmrestd",
                     "slurm-wlm-basic-plugins",
                 ]
+        assert mock_update.called
 
         # Test that a `SlurmOpsError` error is raised if a package fails to install.
         mock_add_package.side_effect = apt.PackageError("failed to install packages")
