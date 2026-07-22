@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      ci-dependencies:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        # Bump deps that change major version independently.
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      python-dependencies:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        # Bump deps that change major version independently.
+        update-types:
+          - minor
+          - patch
