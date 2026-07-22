@@ -30,7 +30,7 @@ jobs:
     name: Release charm
     needs:
       - ci-tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
     strategy:
@@ -45,9 +45,9 @@ jobs:
           sudo rm -rf /usr/local/share/boost
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
       - name: Select Charmhub channel
-        uses: canonical/charming-actions/channel@2.5.0-rc
+        uses: canonical/charming-actions/channel@2.7.0
         id: channel
       - name: Install `just`
         run: sudo snap install just --classic
@@ -58,11 +58,11 @@ jobs:
       - name: Stage charm
         run: just repo stage ${{ matrix.charm }} --clean
       - name: Setup LXD
-        uses: canonical/setup-lxd@v0.1.2
+        uses: canonical/setup-lxd@v1
         with:
           channel: 5.21/stable
       - name: Upload charm to Charmhub
-        uses: canonical/charming-actions/upload-charm@2.5.0-rc
+        uses: canonical/charming-actions/upload-charm@2.7.0
         with:
           credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
