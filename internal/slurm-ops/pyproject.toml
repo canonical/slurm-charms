@@ -24,7 +24,6 @@ dependencies = [
     "charmed-hpc-libs[ops]",
     "charmlibs-apt ~= 1.0",
     "cryptography~=50.0",
-    "distro ~= 1.0",
     "nvidia-ml-py == 12.560.30",
     "slurmutils<2.0.0,>=1.1.1",
 ]

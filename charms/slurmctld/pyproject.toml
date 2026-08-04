@@ -18,7 +18,6 @@ dependencies = [
     "charmlibs-apt",
     "cosl",
     "slurm-ops",
-    "distro"
 ]
 
 [tool.repository]

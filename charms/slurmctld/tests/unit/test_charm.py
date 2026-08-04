@@ -224,8 +224,12 @@ class TestSlurmctldCharm:
     ) -> None:
         """Test successful integration on the SMTP interface."""
         mock_add_package = mocker.patch.object(apt, "add_package")
-        mocker.patch.object(apt, "DebianRepository")
+        mock_repo = mocker.patch.object(apt, "DebianRepository")
         mocker.patch.object(apt, "update")
+        mocker.patch(
+            "mail.platform.freedesktop_os_release",
+            return_value={"VERSION_CODENAME": "noble"},
+        )
 
         with mock_charm(
             mock_charm.on.relation_created(smtp_relation),
@@ -238,6 +242,7 @@ class TestSlurmctldCharm:
             state = manager.run()
 
         mock_add_package.assert_called_once_with("slurm-mail")
+        assert mock_repo.call_args.kwargs["release"] == "noble"
         assert state.unit_status == testing.ActiveStatus()
 
     def test_on_smtp_relation_created_package_install_failure(

@@ -16,6 +16,7 @@
 
 import configparser
 import logging
+import platform
 import shutil
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -23,7 +24,6 @@ from pathlib import Path
 from subprocess import CalledProcessError
 from typing import Literal
 
-import distro
 from charmed_hpc_libs.errors import Error
 from charmlibs import apt
 from constants import (
@@ -149,7 +149,7 @@ def install() -> None:
             enabled=True,
             repotype="deb",
             uri=UBUNTU_HPC_SLURM_MAIL_PPA_URI,
-            release=distro.codename(),
+            release=platform.freedesktop_os_release()["VERSION_CODENAME"],
             groups=["main"],
         )
         ppa.import_key(UBUNTU_HPC_PPA_KEY)
