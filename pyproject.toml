@@ -57,7 +57,7 @@ dev = [
     "pytest ~= 9.0",
     "pytest-order ~= 1.5",
     "pytest-mock ~= 3.14",
-    "tenacity ~= 8.2",
+    "tenacity ~= 9.1",
 
     # Linting
     "ruff",
