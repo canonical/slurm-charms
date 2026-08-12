@@ -98,4 +98,4 @@ fy6i2AnB3kUI27D4HY2YSlXLSRbjiSxTfVwNCzDsIh7Czefsm6ITK2+cVWs0hNQ=
 =cs1s
 -----END PGP PUBLIC KEY BLOCK-----
 """
-UBUNTU_HPC_SLURM_PPA_URI = "https://ppa.launchpadcontent.net/ubuntu-hpc/slurm-wlm-25.11/ubuntu"
+UBUNTU_HPC_SLURM_MAIL_PPA_URI = "https://ppa.launchpadcontent.net/ubuntu-hpc/slurm-mail/ubuntu"

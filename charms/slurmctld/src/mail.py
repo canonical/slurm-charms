@@ -30,7 +30,7 @@ from constants import (
     DEFAULT_SLURM_MAIL_CONFIG,
     SLURM_MAIL_CONFIG_PATH,
     UBUNTU_HPC_PPA_KEY,
-    UBUNTU_HPC_SLURM_PPA_URI,
+    UBUNTU_HPC_SLURM_MAIL_PPA_URI,
 )
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -142,11 +142,13 @@ def install() -> None:
         MailOpsError: If an error occurs during package installation.
     """
     try:
-        _logger.debug("initializing apt to use package repository: %s", UBUNTU_HPC_SLURM_PPA_URI)
+        _logger.debug(
+            "initializing apt to use package repository: %s", UBUNTU_HPC_SLURM_MAIL_PPA_URI
+        )
         ppa = apt.DebianRepository(
             enabled=True,
             repotype="deb",
-            uri=UBUNTU_HPC_SLURM_PPA_URI,
+            uri=UBUNTU_HPC_SLURM_MAIL_PPA_URI,
             release=distro.codename(),
             groups=["main"],
         )
