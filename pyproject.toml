@@ -37,7 +37,7 @@ dev = [
     "distro ~= 1.0",
     "influxdb == 5.3.2",
     "nvidia-ml-py == 12.560.30",
-    "ops ~= 3.0",
+    "ops ~= 3.8",
     "psutil ~= 7.0",
     "pydantic ~= 2.0",
     "slurm-ops",
@@ -45,7 +45,7 @@ dev = [
 
     # Tests
     "charmed-hpc-libs[all] >= 0.1.0",
-    "ops[testing] ~= 3.0",
+    "ops[testing] ~= 3.8",
     "python-dotenv~=1.2.2",
     "pyfakefs == 5.10.1",
     "coverage[toml]",
