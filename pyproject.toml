@@ -34,7 +34,7 @@ dev = [
     "charmlibs-apt ~= 1.0",
     "cosl ~= 1.10",
     "cryptography~=50.0",
-    "distro ~= 1.0",
+    "distro ~= 1.9",
     "influxdb == 5.3.2",
     "nvidia-ml-py == 12.560.30",
     "ops ~= 3.8",
