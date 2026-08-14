@@ -45,7 +45,7 @@ variable "constraints" {
 variable "machines" {
   description = "List of machine IDs to place units on."
   type        = set(string)
-  default     = []
+  default     = null
 }
 
 variable "model_uuid" {
