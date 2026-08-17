@@ -253,6 +253,10 @@ class TestSlurmctldCharm:
         mock_add_package.side_effect = apt.PackageError()
         mocker.patch.object(apt, "DebianRepository")
         mocker.patch.object(apt, "update")
+        mocker.patch(
+            "mail.platform.freedesktop_os_release",
+            return_value={"VERSION_CODENAME": "noble"},
+        )
 
         with mock_charm(
             mock_charm.on.relation_created(smtp_relation),
