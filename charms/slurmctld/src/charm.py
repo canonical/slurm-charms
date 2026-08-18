@@ -964,34 +964,6 @@ class SlurmctldCharm(ops.CharmBase):
                     integration_id=integration.id,
                 )
 
-    def _merge_controller_data(self, app: SackdRequirer | SlurmdRequirer, new_endpoints) -> None:
-        """Merge new controller endpoints with existing controller data."""
-        for integration in app.integrations:
-            current = integration.load(ControllerData, self.app)
-            logger.debug(
-                "existing data for %s integration %s: %s",
-                app._integration_name,
-                integration,
-                current,
-            )
-
-            data = ControllerData(
-                auth_key="",  # Don't set keys here or secrets will be replaced with "***"
-                auth_secret_id=current.auth_secret_id,
-                controllers=new_endpoints,  # Update only the controllers
-                jwt_key="",
-                jwt_secret_id=current.jwt_secret_id,
-                slurmconfig=current.slurmconfig,
-            )
-
-            logger.debug(
-                "updating %s integration %s with new data: %s",
-                app._integration_name,
-                integration,
-                data,
-            )
-            app.set_controller_data(data, integration_id=integration.id)
-
     def _refresh_controllers(self) -> None:
         """Refresh the list of controllers in slurm.conf and relevant Slurm services.
 
@@ -1005,8 +977,11 @@ class SlurmctldCharm(ops.CharmBase):
 
         # sackd and slurmd require a list of endpoints (host:port), rather than just hostnames
         new_endpoints = [f"{c}:{SLURMCTLD_PORT}" for c in new_controllers]
-        self._merge_controller_data(self.sackd, new_endpoints)
-        self._merge_controller_data(self.slurmd, new_endpoints)
+        data = ControllerData(controllers=new_endpoints)
+        for integration in self.sackd.integrations:
+            self.sackd.set_controller_data(data, integration_id=integration.id, merge=True)
+        for integration in self.slurmd.integrations:
+            self.slurmd.set_controller_data(data, integration_id=integration.id, merge=True)
 
     def _rotate_key(
         self,
