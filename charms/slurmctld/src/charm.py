@@ -728,12 +728,6 @@ class SlurmctldCharm(ops.CharmBase):
             return
 
         self.slurmctld.key.keep_latest_key()
-        # Reconfigure must come before revision is removed to ensure secret ID can be retrieved for
-        # slurmrestd databag. This prevents a SecretNotFoundError.
-        # TODO: This will not be necessary once merging of values into the databag is implemented
-        # and the secret ID no longer needs set in _reconfigure.
-        self._reconfigure()
-
         event.remove_revision()
 
     @refresh
@@ -948,20 +942,16 @@ class SlurmctldCharm(ops.CharmBase):
             )
 
         if self.slurmrestd.is_joined():
-            # Workaround for: https://github.com/canonical/slurm-charms/issues/203
-            # TODO: Remove setting of key ID once merging of databag info is implemented. Only the
-            # slurmconfig needs updated. The auth Secret ID should not be overwritten
-            auth_secret_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
             for integration in self.model.relations.get(SLURMRESTD_INTEGRATION_NAME, []):
                 self.slurmrestd.set_controller_data(
                     ControllerData(
-                        auth_secret_id=auth_secret_id,
                         slurmconfig={
                             "slurm.conf": self.slurmctld.config.load(),
                             **{k: v.load() for k, v in self.slurmctld.config.includes.items()},
                         },
                     ),
                     integration_id=integration.id,
+                    merge=True,
                 )
 
     def _refresh_controllers(self) -> None:
