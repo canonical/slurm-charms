@@ -710,12 +710,6 @@ class SlurmctldCharm(ops.CharmBase):
             return
 
         self.slurmctld.key.keep_latest_key()
-        # Reconfigure must come before revision is removed to ensure secret ID can be retrieved for
-        # slurmrestd databag. This prevents a SecretNotFoundError.
-        # TODO: This will not be necessary once merging of values into the databag is implemented
-        # and the secret ID no longer needs set in _reconfigure.
-        self._reconfigure()
-
         event.remove_revision()
 
     @refresh
@@ -924,49 +918,17 @@ class SlurmctldCharm(ops.CharmBase):
             )
 
         if self.slurmrestd.is_joined():
-            # Workaround for: https://github.com/canonical/slurm-charms/issues/203
-            # TODO: Remove setting of key ID once merging of databag info is implemented. Only the
-            # slurmconfig needs updated. The auth Secret ID should not be overwritten
-            auth_secret_id = self.model.get_secret(label=AUTH_KEY_LABEL).get_info().id
             for integration in self.model.relations.get(SLURMRESTD_INTEGRATION_NAME, []):
                 self.slurmrestd.set_controller_data(
                     ControllerData(
-                        auth_secret_id=auth_secret_id,
                         slurmconfig={
                             "slurm.conf": self.slurmctld.config.load(),
                             **{k: v.load() for k, v in self.slurmctld.config.includes.items()},
                         },
                     ),
                     integration_id=integration.id,
+                    merge=True,
                 )
-
-    def _merge_controller_data(self, app: SackdRequirer | SlurmdRequirer, new_endpoints) -> None:
-        """Merge new controller endpoints with existing controller data."""
-        for integration in app.integrations:
-            current = integration.load(ControllerData, self.app)
-            logger.debug(
-                "existing data for %s integration %s: %s",
-                app._integration_name,
-                integration,
-                current,
-            )
-
-            data = ControllerData(
-                auth_key="",  # Don't set keys here or secrets will be replaced with "***"
-                auth_secret_id=current.auth_secret_id,
-                controllers=new_endpoints,  # Update only the controllers
-                jwt_key="",
-                jwt_secret_id=current.jwt_secret_id,
-                slurmconfig=current.slurmconfig,
-            )
-
-            logger.debug(
-                "updating %s integration %s with new data: %s",
-                app._integration_name,
-                integration,
-                data,
-            )
-            app.set_controller_data(data, integration_id=integration.id)
 
     def _refresh_controllers(self) -> None:
         """Refresh the list of controllers in slurm.conf and relevant Slurm services.
@@ -981,8 +943,11 @@ class SlurmctldCharm(ops.CharmBase):
 
         # sackd and slurmd require a list of endpoints (host:port), rather than just hostnames
         new_endpoints = [f"{c}:{SLURMCTLD_PORT}" for c in new_controllers]
-        self._merge_controller_data(self.sackd, new_endpoints)
-        self._merge_controller_data(self.slurmd, new_endpoints)
+        data = ControllerData(controllers=new_endpoints)
+        for integration in self.sackd.integrations:
+            self.sackd.set_controller_data(data, integration_id=integration.id, merge=True)
+        for integration in self.slurmd.integrations:
+            self.slurmd.set_controller_data(data, integration_id=integration.id, merge=True)
 
     def _rotate_key(
         self,

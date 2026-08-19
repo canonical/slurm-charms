@@ -122,11 +122,11 @@ wheels = [
 
 [[package]]
 name = "charmed-hpc-libs"
-version = "0.5.0"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/03/7a/ac2abd0d2c0e17013ea04d50bb69951d92c6ebc5b2e9d9e26834c5a37c8b/charmed_hpc_libs-0.5.0.tar.gz", hash = "sha256:dd090e599badcd195b5546823a433d5effb5c96e01db353461310de13b5b88a8", size = 53736, upload-time = "2026-07-22T15:47:01.92Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/01/78/421c97d4b988ec51104b02cda92ba1504e63bf0b0166d4ce7545b3dfba94/charmed_hpc_libs-0.6.0.tar.gz", hash = "sha256:409a96cfbb41723d3acbfe2ceb79211811fe76bf3a53589d9ea79c6001b5f90d", size = 54953, upload-time = "2026-08-18T17:47:38.553Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/80/74/857e3b470a2523dd3f0ee57ab48ce365a6b31d891840bbfc82142186ac42/charmed_hpc_libs-0.5.0-py3-none-any.whl", hash = "sha256:eb8cb147a5caaa5cab24f53c9ecea76217cac2e84e0a853d21b4f4df9d394c3b", size = 31514, upload-time = "2026-07-22T15:47:00.861Z" },
+    { url = "https://files.pythonhosted.org/packages/df/3e/af577a28a815a4c90e2bd732314e28afd3cacd8081a0c09feb878ef317ee/charmed_hpc_libs-0.6.0-py3-none-any.whl", hash = "sha256:edb9726d7f707e774aae0a551fac1f3fbd6f19d7f5aa95a14bec22e44de13ea8", size = 32281, upload-time = "2026-08-18T17:47:37.583Z" },
 ]
 
 [package.optional-dependencies]
@@ -178,7 +178,7 @@ requires-dist = [
 
 [[package]]
 name = "charmed-slurm-slurmctld-interface"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "pkg/slurmctld-interface" }
 dependencies = [
     { name = "charmed-hpc-libs", extra = ["interfaces", "ops"] },
@@ -188,7 +188,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "charmed-hpc-libs", extras = ["interfaces", "ops"], specifier = ">=0.1.0" },
+    { name = "charmed-hpc-libs", extras = ["interfaces", "ops"], specifier = "~=0.6" },
     { name = "ops", specifier = "~=3.0" },
     { name = "slurmutils", specifier = ">=1.1.1,<2.0.0" },
 ]
@@ -1096,7 +1096,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiosmtpd", marker = "extra == 'dev'", specifier = "==1.4.6" },
-    { name = "charmed-hpc-libs", extras = ["all"], marker = "extra == 'dev'", specifier = ">=0.1.0" },
+    { name = "charmed-hpc-libs", extras = ["all"], marker = "extra == 'dev'", specifier = "~=0.6" },
     { name = "charmed-slurm-oci-runtime-interface", marker = "extra == 'dev'", editable = "pkg/slurm-oci-runtime-interface" },
     { name = "charmed-slurm-sackd-interface", marker = "extra == 'dev'", editable = "internal/sackd-interface" },
     { name = "charmed-slurm-slurmctld-interface", marker = "extra == 'dev'", editable = "pkg/slurmctld-interface" },
@@ -1112,8 +1112,8 @@ requires-dist = [
     { name = "influxdb", marker = "extra == 'dev'", specifier = "==5.3.2" },
     { name = "jubilant", marker = "extra == 'dev'", specifier = "~=1.0" },
     { name = "nvidia-ml-py", marker = "extra == 'dev'", specifier = "==12.560.30" },
-    { name = "ops", marker = "extra == 'dev'", specifier = "~=3.0" },
-    { name = "ops", extras = ["testing"], marker = "extra == 'dev'", specifier = "~=3.0" },
+    { name = "ops", marker = "extra == 'dev'", specifier = "~=3.8" },
+    { name = "ops", extras = ["testing"], marker = "extra == 'dev'", specifier = "~=3.8" },
     { name = "psutil", marker = "extra == 'dev'", specifier = "~=7.0" },
     { name = "pydantic", marker = "extra == 'dev'", specifier = "~=2.0" },
     { name = "pyfakefs", marker = "extra == 'dev'", specifier = "==5.10.1" },
@@ -1122,14 +1122,14 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "~=9.0" },
     { name = "pytest-mock", marker = "extra == 'dev'", specifier = "~=3.14" },
-    { name = "pytest-order", marker = "extra == 'dev'", specifier = "~=1.4" },
+    { name = "pytest-order", marker = "extra == 'dev'", specifier = "~=1.5" },
     { name = "python-dotenv", marker = "extra == 'dev'", specifier = "~=1.2.2" },
     { name = "pyyaml", marker = "extra == 'dev'" },
     { name = "rtoml", marker = "extra == 'dev'", specifier = "~=0.0" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "slurm-ops", marker = "extra == 'dev'", editable = "internal/slurm-ops" },
     { name = "slurmutils", marker = "extra == 'dev'", specifier = ">=1.3.0,<2.0.0" },
-    { name = "tenacity", marker = "extra == 'dev'", specifier = "~=8.2" },
+    { name = "tenacity", marker = "extra == 'dev'", specifier = "~=9.1" },
 ]
 provides-extras = ["dev"]
 
@@ -1285,11 +1285,11 @@ wheels = [
 
 [[package]]
 name = "tenacity"
-version = "8.5.0"
+version = "9.1.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/a3/4d/6a19536c50b849338fcbe9290d562b52cbdcf30d8963d3588a68a4107df1/tenacity-8.5.0.tar.gz", hash = "sha256:8bc6c0c8a09b31e6cad13c47afbed1a567518250a9a171418582ed8d9c20ca78", size = 47309, upload-time = "2024-07-05T07:25:31.836Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/c6/ee486fd809e357697ee8a44d3d69222b344920433d3b6666ccd9b374630c/tenacity-9.1.4.tar.gz", hash = "sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a", size = 49413, upload-time = "2026-02-07T10:45:33.841Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/3f/8ba87d9e287b9d385a02a7114ddcef61b26f86411e121c9003eb509a1773/tenacity-8.5.0-py3-none-any.whl", hash = "sha256:b594c2a5945830c267ce6b79a166228323ed52718f30302c1359836112346687", size = 28165, upload-time = "2024-07-05T07:25:29.591Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55", size = 28926, upload-time = "2026-02-07T10:45:32.24Z" },
 ]
 
 [[package]]

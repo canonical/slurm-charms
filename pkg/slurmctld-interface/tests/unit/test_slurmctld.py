@@ -254,6 +254,46 @@ class TestSlurmctldInterface:
             else:
                 assert integration.local_app_data["jwt_secret_id"] == '""'
 
+    def test_provider_set_controller_data_merge(self, provider_ctx, leader) -> None:
+        """Test that `set_controller_data` merges data when ``merge=True``."""
+        if not leader:
+            return
+
+        slurmctld_integration_id = 1
+        slurmctld_integration = testing.Relation(
+            endpoint=SLURMCTLD_INTEGRATION_NAME,
+            interface="slurmctld",
+            id=slurmctld_integration_id,
+            remote_app_name="slurmctld-requirer",
+            local_app_data={
+                "auth_secret_id": json.dumps("auth-secret-id"),
+                "jwt_secret_id": json.dumps("jwt-secret-id"),
+                "controllers": json.dumps(EXAMPLE_CONTROLLERS),
+                "slurmconfig": json.dumps(EXAMPLE_SLURM_CONFIG, default=lambda o: o.dict()),
+            },
+        )
+
+        # Merge new controller endpoints, leaving the other fields unset so they are preserved.
+        new_controllers = ["127.0.0.2"]
+        with provider_ctx(
+            provider_ctx.on.relation_changed(slurmctld_integration),
+            testing.State(leader=leader, relations={slurmctld_integration}),
+        ) as manager:
+            manager.charm.slurmctld.set_controller_data(
+                ControllerData(controllers=new_controllers),
+                integration_id=slurmctld_integration_id,
+                merge=True,
+            )
+            state = manager.run()
+
+        integration = state.get_relation(slurmctld_integration_id)
+        # Only the controllers field is updated.
+        assert json.loads(integration.local_app_data["controllers"]) == new_controllers
+        # Existing fields are preserved when merging.
+        assert json.loads(integration.local_app_data["auth_secret_id"]) == "auth-secret-id"
+        assert json.loads(integration.local_app_data["jwt_secret_id"]) == "jwt-secret-id"
+        assert "slurmconfig" in integration.local_app_data
+
     # Test requirer-side of the `slurmctld` interface.
 
     def test_requirer_on_slurmctld_connected_event(self, requirer_ctx, leader) -> None:

@@ -23,7 +23,7 @@ dev = [
     "rtoml ~= 0.13",
 
     # Development
-    "charmed-hpc-libs[all] >= 0.5.0",
+    "charmed-hpc-libs[all] ~= 0.6",
     "slurm-ops",
     "charmed-slurm-slurmctld-interface",
     "charmed-slurm-oci-runtime-interface",
@@ -43,7 +43,7 @@ dev = [
     "slurmutils>=1.3.1,<2.0.0",
 
     # Tests
-    "charmed-hpc-libs[all] >= 0.5.0",
+    "charmed-hpc-libs[all] ~= 0.6",
     "ops[testing] ~= 3.8",
     "python-dotenv~=1.2.2",
     "pyfakefs == 6.2.0",
