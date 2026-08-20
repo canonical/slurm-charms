@@ -60,7 +60,6 @@ def setup_apptainer(juju: jubilant.Juju, base: str) -> None:
     sleep(5)
 
 
-@pytest.mark.skip(reason="temporarily disabled for transition to new OCI runtime interface")
 @pytest.mark.order(13)
 def test_apptainer_oci_scheduling(juju: jubilant.Juju, base: str) -> None:
     """Test that Slurm can schedule jobs using Apptainer."""
