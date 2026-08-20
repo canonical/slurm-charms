@@ -45,7 +45,7 @@ dev = [
     # Tests
     "charmed-hpc-libs[all] >= 0.7.1",
     "ops[testing] ~= 3.8",
-    "python-dotenv~=1.2.2",
+    "python-dotenv~=1.2.3",
     "pyfakefs == 6.2.0",
     "coverage[toml]",
     "psutil ~= 7.2",
