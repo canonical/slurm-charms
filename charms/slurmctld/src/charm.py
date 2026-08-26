@@ -728,6 +728,7 @@ class SlurmctldCharm(ops.CharmBase):
             return
 
         self.slurmctld.key.keep_latest_key()
+        self._reconfigure()
         event.remove_revision()
 
     @refresh
