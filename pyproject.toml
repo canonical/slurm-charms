@@ -35,7 +35,7 @@ dev = [
     "cosl ~= 1.10",
     "cryptography~=50.0",
     "influxdb == 5.3.2",
-    "nvidia-ml-py == 12.560.30",
+    "nvidia-ml-py == 13.610.43",
     "ops ~= 3.8",
     "psutil ~= 7.2",
     "pydantic ~= 2.13",
