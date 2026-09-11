@@ -20,7 +20,6 @@ __all__ = [
     "SlurmctldPeer",
 ]
 
-import json
 import logging
 import uuid
 from dataclasses import dataclass
@@ -77,22 +76,6 @@ class SlurmctldPeerJoinedEvent(ops.RelationEvent):
 
 class SlurmctldPeerDepartedEvent(ops.RelationEvent):
     """Emitted when a `slurmctld` controller leaves the peer integration."""
-
-
-def _unit_data_decoder(value: str) -> str:
-    """Decode integration unit databag data.
-
-    The default encoder for `ops.Relation.load()` is `json.loads()` which incorrectly tries to
-    decode IPv4 addresses as float values. This decoder circumvents this error by quoting unquoted
-    values to convert them to strings.
-
-    The unit databag, by default, contains IP addresses such as the `ingress-address` for the unit.
-    The default `json.loads()` decoder causes an `json.decoder.JSONDecodeError: Extra data` error
-    when attempting to decode these values.
-    """
-    if not (value.startswith('"') and value.endswith('"')):
-        value = f'"{value}"'
-    return json.loads(value)
 
 
 class _SlurmctldPeerEvents(ops.ObjectEvents):
@@ -189,7 +172,7 @@ class SlurmctldPeer(Interface):
         Returns:
             The controller peer data for the given unit, or `None` if no data is set.
         """
-        return self._get_peer_data(unit, ControllerPeerUnitData, _unit_data_decoder)
+        return self._get_peer_data(unit, ControllerPeerUnitData)
 
     def get_controllers(self) -> set[str]:
         """Return controller hostnames from the peer relation.
@@ -269,7 +252,6 @@ class SlurmctldPeer(Interface):
         self,
         target: ops.Application | ops.Unit,
         data_type: type[ControllerPeerAppData] | type[ControllerPeerUnitData],
-        decoder=None,
     ) -> Any:
         """Get unit or app peer data."""
         integration = self.get_integration()
@@ -287,9 +269,7 @@ class SlurmctldPeer(Interface):
             target.name,
         )
 
-        if decoder is None:
-            return integration.load(data_type, target)
-        return integration.load(data_type, target, decoder=decoder)
+        return integration.load(data_type, target)
 
     def _set_peer_data(
         self,
