@@ -36,7 +36,7 @@ dev = [
     "cryptography~=50.0",
     "influxdb == 5.3.2",
     "nvidia-ml-py == 12.560.30",
-    "ops ~= 3.8",
+    "ops ~= 3.8.1",
     "psutil ~= 7.2",
     "pydantic ~= 2.13",
     "slurm-ops",
@@ -44,7 +44,7 @@ dev = [
 
     # Tests
     "charmed-hpc-libs[all] >= 0.7.1",
-    "ops[testing] ~= 3.8",
+    "ops[testing] ~= 3.8.1",
     "python-dotenv~=1.2",
     "pyfakefs == 6.2.0",
     "coverage[toml]",
