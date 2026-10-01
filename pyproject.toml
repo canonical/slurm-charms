@@ -52,7 +52,7 @@ dev = [
 
     # Integration
     "aiosmtpd == 1.4.6",
-    "jubilant ~= 1.12",
+    "jubilant ~= 1.13",
     "pytest ~= 9.1",
     "pytest-order ~= 1.5",
     "pytest-mock ~= 3.15",
