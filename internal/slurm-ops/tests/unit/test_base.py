@@ -229,3 +229,79 @@ class TestSlurmManager:
 
             case _:
                 assert mock_run.call_args[0][0] == ["systemctl", "daemon-reload"]
+
+    def test_reconfigure(self, mock_manager, mock_run, mocker: MockerFixture, fs: FakeFilesystem) -> None:
+        """Test the `reconfigure` method."""
+        manager, service = mock_manager
+
+        kwargs = {"restart": True} if service == "slurmctld" else {}
+        if service == "slurmdbd":
+            fs.create_dir("/etc/slurm")
+            mocker.patch("shutil.chown")
+
+        manager.reconfigure(**kwargs)
+
+        systemctl_calls = [
+            call[0][0] for call in mock_run.call_args_list if call[0][0][:1] == ["systemctl"]
+        ]
+        assert systemctl_calls == [
+            ["systemctl", "reset-failed", service],
+            ["systemctl", "enable", service],
+            ["systemctl", "restart", service],
+        ]
+
+    def test_reconfigure_reset_failed_error(
+        self, mock_manager, mock_run, mocker: MockerFixture, fs: FakeFilesystem
+    ) -> None:
+        """Test that a `reset-failed` error is wrapped in `SlurmOpsError`."""
+        manager, service = mock_manager
+
+        mock_run.side_effect = subprocess.CalledProcessError(
+            cmd=["systemctl", "reset-failed", service],
+            returncode=1,
+            output="",
+            stderr="reset-failed failed",
+        )
+
+        kwargs = {"restart": True} if service == "slurmctld" else {}
+        if service == "slurmdbd":
+            fs.create_dir("/etc/slurm")
+            fs.create_file("/etc/slurm/slurmdbd.conf")
+            mocker.patch("shutil.chown")
+
+        with pytest.raises(SlurmOpsError) as exec_info:
+            manager.reconfigure(**kwargs)
+
+        assert exec_info.value.message == (
+            f"failed to reconfigure Slurm service '{service}'"
+        )
+
+    def test_reconfigure_restart_error(
+        self, mock_manager, mock_run, mocker: MockerFixture, fs: FakeFilesystem
+    ) -> None:
+        """Test that a restart error is wrapped in `SlurmOpsError`."""
+        manager, service = mock_manager
+
+        mock_run.side_effect = [
+            subprocess.CompletedProcess([], returncode=0),
+            subprocess.CompletedProcess([], returncode=0),
+            subprocess.CalledProcessError(
+                cmd=["systemctl", "restart", service],
+                returncode=1,
+                output="",
+                stderr="restart failed",
+            ),
+        ]
+
+        kwargs = {"restart": True} if service == "slurmctld" else {}
+        if service == "slurmdbd":
+            fs.create_dir("/etc/slurm")
+            fs.create_file("/etc/slurm/slurmdbd.conf")
+            mocker.patch("shutil.chown")
+
+        with pytest.raises(SlurmOpsError) as exec_info:
+            manager.reconfigure(**kwargs)
+
+        assert exec_info.value.message == (
+            f"failed to reconfigure Slurm service '{service}'"
+        )
