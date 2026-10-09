@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,45 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""`influxdb` integration tests for the Slurm charms."""
+"""BDD step definitions for Slurm InfluxDB task accounting.
+
+Currently skipped because the influxdb charm deployment is broken.
+"""
 
 import logging
-from time import sleep
 
-import jubilant
 import pytest
-from constants import INFLUXDB_APP_NAME, SACKD_APP_NAME, SLURMCTLD_APP_NAME
+from pytest_bdd import parsers, scenarios, then
+from pytest_jubilant_bdd import Context
 
 logger = logging.getLogger(__name__)
 
+pytestmark = [
+    pytest.mark.order(12),
+    pytest.mark.skip(reason="influxdb charm deployment is currently broken"),
+]
 
-def setup_influxdb(juju: jubilant.Juju) -> None:
-    """Deploy and integrate `influxdb` with `slurmctld`.
-
-    Notes:
-        - Sleep for five seconds after the `influxdb` app reaches active status
-          to give the cluster enough time to reconfigure.
-    """
-    logger.info("deploying '%s'", INFLUXDB_APP_NAME)
-    juju.deploy(INFLUXDB_APP_NAME)
-
-    logger.info("integrating '%s' application with '%s' application")
-    juju.integrate(INFLUXDB_APP_NAME, SLURMCTLD_APP_NAME)
-
-    juju.wait(lambda status: jubilant.all_active(status, INFLUXDB_APP_NAME))
-    sleep(5)
+scenarios("features/slurm_influxdb_accounting.feature")
 
 
-@pytest.mark.skip(reason="influxdb charm deployment is currently broken")
-@pytest.mark.order(12)
-def test_task_accounting_works(juju: jubilant.Juju) -> None:
-    """Test that `influxdb` is recording task level info."""
-    if INFLUXDB_APP_NAME not in juju.status().apps:
-        setup_influxdb(juju)
+@then(
+    parsers.parse("a slurm sstat task accounting job on unit '{unit}' reports '{expected}' task")
+)
+def task_accounting(context: Context, unit: str, expected: str) -> None:
+    """Submit a sleep job via sbatch and verify sstat reports the task count."""
+    juju = context.get_juju()
 
-    unit = f"{SACKD_APP_NAME}/0"
-
-    logger.info("testing that '%s' is recording task level info", INFLUXDB_APP_NAME)
     juju.scp(
         "tests/integration/testdata/sbatch_sleep_job.sh",
         f"ubuntu@{unit}:~/sbatch_sleep_job.sh",
@@ -60,13 +48,15 @@ def test_task_accounting_works(juju: jubilant.Juju) -> None:
         "sbatch", "--parsable", "/home/ubuntu/sbatch_sleep_job.sh", unit=unit
     ).stdout.strip()
 
-    logger.info("\n" + juju.exec("squeue", unit=unit).stdout)
+    logger.info("\n%s", juju.exec("squeue", unit=unit).stdout)
 
-    # Give a few seconds for the job to enter the queue and transition to RUNNING (takes ~ 5s).
-    sleep(5)
+    # Give a few seconds for the job to enter the queue and transition to RUNNING.
+    import time
 
-    logger.info("\n" + juju.exec("squeue", unit=unit).stdout)
+    time.sleep(5)
+
+    logger.info("\n%s", juju.exec("squeue", unit=unit).stdout)
 
     result = juju.exec("sstat", job_id, "--format=NTasks", "--noheader", unit=unit).stdout.strip()
-    logger.info("\n" + result)
-    assert int(result) == 1
+    logger.info("\n%s", result)
+    assert int(result) == int(expected)

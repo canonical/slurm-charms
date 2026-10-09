@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Slurm charm high availability tests."""
+"""BDD step definitions for slurmctld high availability."""
 
 import json
 import logging
@@ -21,72 +20,44 @@ import subprocess
 
 import jubilant
 import pytest
-import tenacity
 from constants import (
     CEPHFS_SERVER_PROXY_APP_NAME,
-    DEFAULT_FILESYSTEM_CHARM_CHANNEL,
-    FILESYSTEM_CLIENT_APP_NAME,
     MICROCEPH_APP_NAME,
     SACKD_APP_NAME,
     SLURM_APPS,
     SLURM_WAIT_TIMEOUT,
     SLURMCTLD_APP_NAME,
-    SLURMD_APP_NAME,
 )
+from pytest_bdd import given, parsers, scenarios, then, when
+from pytest_jubilant_bdd import Context
+from utils import node_name, scontrol_show_node
 
 logger = logging.getLogger(__name__)
-pytestmark = pytest.mark.high_availability
+
+pytestmark = [
+    pytest.mark.order(19),
+    pytest.mark.high_availability,
+]
+
+scenarios("features/slurmctld_high_availability.feature")
 
 
-def assert_pinged(controllers: dict, expected_statuses: dict):
-    for name, expected in expected_statuses.items():
-        actual = controllers[name]["pinged"]
-        assert actual == expected, f"status for {name}: expected '{expected}', got '{actual}'"
+# ---------------------------------------------------------------------------
+# Slurm controller discovery via ``scontrol ping``
+# ---------------------------------------------------------------------------
 
 
-def assert_hostname(new: dict, old: dict, mapping: dict):
-    for new_key, old_key in mapping.items():
-        expected = old[old_key]["hostname"]
-        actual = new[new_key]["hostname"]
-        assert actual == expected, (
-            f"hostname mismatch for {new_key} vs {old_key}: expected '{expected}', got '{actual}'"
-        )
+def _get_slurm_controllers(context: Context, query_unit: str = f"{SACKD_APP_NAME}/0") -> dict:
+    """Return a dict of Slurmctld controller statuses keyed by mode.
 
-
-def assert_sinfo(sinfo_result: jubilant.Task):
-    assert sinfo_result.return_code == 0, (
-        f"`sinfo` operation status: '{sinfo_result.status}'\nstdout: {sinfo_result.stdout}\nstderr: {sinfo_result.stderr}"
-    )
-
-
-def assert_powered_off(juju: jubilant.Juju, machine_id, hostname):
-    assert juju.status().machines[machine_id].juju_status.current == "down", (
-        f"machine '{hostname}' is not powered off"
-    )
-
-
-@tenacity.retry(
-    wait=tenacity.wait.wait_exponential(multiplier=2, min=1, max=10),
-    stop=tenacity.stop_after_attempt(5),
-    reraise=True,
-)
-def _get_slurm_controllers(juju: jubilant.Juju, query_unit: str = f"{SACKD_APP_NAME}/0") -> dict:
-    """Return a dictionary of Slurmctld statuses allowing lookup by mode."""
+    Polls ``scontrol ping --json`` on the login node and correlates ping
+    results with ``juju status`` to map modes (primary, backup, ...) to
+    unit, leader, and machine metadata.
+    """
+    juju = context.get_juju()
     status = juju.status()
-
-    # Query controller status by running `scontrol ping` on the login node.
-    # Example snippet of ping output:
-    #   "pings": [
-    #     {
-    #       "hostname": "juju-829e74-84",
-    #       "pinged": "DOWN",
-    #       "latency": 123,
-    #       "mode": "primary"
-    #     },
     ping_output = json.loads(juju.exec("scontrol ping --json", unit=query_unit).stdout)
     pings = ping_output["pings"]
-
-    # Temp dictionary for more efficient lookup of pings by hostname
     pings_by_hostname = {ping["hostname"]: ping for ping in pings}
 
     slurm_controllers = {}
@@ -94,7 +65,6 @@ def _get_slurm_controllers(juju: jubilant.Juju, query_unit: str = f"{SACKD_APP_N
         hostname = status.machines[unit_status.machine].instance_id
         if hostname in pings_by_hostname:
             ping_data = pings_by_hostname[hostname]
-            # Unit name, leader status and machine ID added to output for test convenience
             ping_data["unit"] = unit
             ping_data["leader"] = unit_status.leader
             ping_data["machine"] = unit_status.machine
@@ -103,50 +73,85 @@ def _get_slurm_controllers(juju: jubilant.Juju, query_unit: str = f"{SACKD_APP_N
     return slurm_controllers
 
 
-@pytest.mark.order(19)
-def test_slurmctld_ha_deploy(juju: jubilant.Juju, base: str) -> None:
-    """Test deployment of high availability file system and migration of StateSaveLocation data."""
-    # Ceph shared storage necessary for all controller instances to share StateSaveLocation data
-    juju.deploy(
-        "microceph",
-        MICROCEPH_APP_NAME,
-        constraints={"mem": "4G", "root-disk": "20G", "virt-type": "virtual-machine"},
-        storage={"osd-standalone": "loop,2G,3"},
-    )
-    juju.deploy(
-        "filesystem-client",
-        FILESYSTEM_CLIENT_APP_NAME,
-        channel=DEFAULT_FILESYSTEM_CHARM_CHANNEL,
-        base=base,
-    )
+def _wait_for_controllers(context: Context, predicate) -> dict:
+    """Poll ``_get_slurm_controllers`` until ``predicate(controllers)`` passes."""
 
-    # Must wait for Microceph to become active before CephFS and proxy can be set up
-    juju.wait(lambda status: jubilant.all_active(status, "microceph"))
+    def ready(_ctx: Context) -> bool:
+        try:
+            controllers = _get_slurm_controllers(context)
+            predicate(controllers)
+            return True
+        except Exception:
+            return False
 
-    # Set up CephFS
-    # TODO: replace with charm following https://github.com/canonical/ceph-charms/pull/93
+    context.wait(ready=ready)
+    return _get_slurm_controllers(context)
+
+
+def _controllers(context: Context) -> dict:
+    """Return recorded controller snapshot if available, else query fresh.
+
+    Steps that need stable unit/machine references across failover or
+    recovery must use this helper so the mode-to-unit mapping captured
+    *before* the state change is used throughout the scenario.
+    """
+    scenario_state = context.scenario_state
+    if "ha_controllers" in scenario_state:
+        return scenario_state["ha_controllers"]
+    return _get_slurm_controllers(context)
+
+
+# ---------------------------------------------------------------------------
+# Juju machine status helpers
+# ---------------------------------------------------------------------------
+
+
+def _down_controller_machines(context: Context) -> dict[str, str]:
+    """Return a mapping of slurmctld units to machine ids whose juju machine is down."""
+    juju = context.get_juju()
+    status = juju.status()
+    return {
+        unit: unit_status.machine
+        for unit, unit_status in status.apps[SLURMCTLD_APP_NAME].units.items()
+        if status.machines[unit_status.machine].juju_status.current == "down"
+    }
+
+
+def _machine_is_down(status: jubilant.Status, machine_id: str) -> bool:
+    """Return ``True`` if the juju machine's agent status is ``down``."""
+    return status.machines[machine_id].juju_status.current == "down"
+
+
+# ---------------------------------------------------------------------------
+# Deploy steps with constraints / storage / config
+# ---------------------------------------------------------------------------
+
+
+@given(
+    parsers.parse(
+        "I deploy 'cephfs-server-proxy' from channel '{channel}' "
+        "with cephfs config gathered from unit 'microceph/0'"
+    )
+)
+def deploy_cephfs_proxy(context: Context, channel: str) -> None:
+    """Gather CephFS config from microceph and deploy cephfs-server-proxy."""
+    juju = context.get_juju()
     microceph_unit = f"{MICROCEPH_APP_NAME}/0"
-    cephfs_setup = [
-        "microceph.ceph osd pool create cephfs_data",
-        "microceph.ceph osd pool create cephfs_metadata",
-        "microceph.ceph fs new cephfs cephfs_metadata cephfs_data",
-        "microceph.ceph fs authorize cephfs client.fs-client / rw",
-    ]
-    for cmd in cephfs_setup:
-        juju.exec(cmd, unit=microceph_unit)
 
-    # Gather config from microceph to set up proxy
     microceph_host = juju.exec("hostname -I", unit=microceph_unit).stdout.strip()
     microceph_fsid = juju.exec(
-        "microceph.ceph -s -f json | jq -r '.fsid'", unit=microceph_unit
+        "source /etc/profile.d/apps-bin-path.sh && microceph.ceph -s -f json | jq -r '.fsid'",
+        unit=microceph_unit,
     ).stdout.strip()
     microceph_key = juju.exec(
-        "microceph.ceph auth print-key client.fs-client", unit=microceph_unit
+        "source /etc/profile.d/apps-bin-path.sh && microceph.ceph auth print-key client.fs-client",
+        unit=microceph_unit,
     ).stdout
+
     juju.deploy(
-        "cephfs-server-proxy",
         CEPHFS_SERVER_PROXY_APP_NAME,
-        channel=DEFAULT_FILESYSTEM_CHARM_CHANNEL,
+        CEPHFS_SERVER_PROXY_APP_NAME,
+        channel=channel,
         config={
             "fsid": microceph_fsid,
             "sharepoint": "cephfs:/",
@@ -155,393 +160,343 @@ def test_slurmctld_ha_deploy(juju: jubilant.Juju, base: str) -> None:
         },
     )
 
-    logger.info("integrating file system and controller")
-    juju.integrate(FILESYSTEM_CLIENT_APP_NAME, CEPHFS_SERVER_PROXY_APP_NAME)
-    juju.integrate(f"{FILESYSTEM_CLIENT_APP_NAME}:mount", f"{SLURMCTLD_APP_NAME}:mount")
-    juju.wait(jubilant.all_active, timeout=SLURM_WAIT_TIMEOUT)
 
-    logger.info("checking primary controller")
+# ---------------------------------------------------------------------------
+# CephFS setup
+# ---------------------------------------------------------------------------
 
-    @tenacity.retry(
-        wait=tenacity.wait.wait_exponential(multiplier=3, min=10, max=30),
-        stop=tenacity.stop_after_attempt(5),
-        reraise=True,
+
+@given(parsers.parse("I set up the cephfs pools and client on unit '{unit}'"))
+def setup_cephfs(context: Context, unit: str) -> None:
+    """Create CephFS pools and authorise a client on microceph."""
+    juju = context.get_juju()
+    juju.exec(
+        "source /etc/profile.d/apps-bin-path.sh && "
+        "microceph.ceph osd pool create cephfs_data && "
+        "microceph.ceph osd pool create cephfs_metadata && "
+        "microceph.ceph fs new cephfs cephfs_metadata cephfs_data && "
+        "microceph.ceph fs authorize cephfs client.fs-client / rw",
+        unit=unit,
     )
-    def retry_asserts():
-        controllers = _get_slurm_controllers(juju)
-        assert_pinged(controllers, {"primary": "UP"})
-
-    retry_asserts()
 
 
-@pytest.mark.order(20)
-def test_slurmctld_scale_up(juju: jubilant.Juju) -> None:
-    """Test scaling up slurmctld by two units."""
-    controllers = _get_slurm_controllers(juju)
-    logger.info("checking primary controller")
-    assert_pinged(controllers, {"primary": "UP"})
+# ---------------------------------------------------------------------------
+# Controller snapshot and hostname continuity
+# ---------------------------------------------------------------------------
 
-    logger.info("adding controllers")
-    juju.add_unit(SLURMCTLD_APP_NAME, num_units=2)
-    # All Slurm apps must be waited for to allow new controller hostnames to propagate
-    juju.wait(lambda status: jubilant.all_active(status, *SLURM_APPS), timeout=SLURM_WAIT_TIMEOUT)
 
-    @tenacity.retry(
-        wait=tenacity.wait.wait_exponential(multiplier=3, min=10, max=30),
-        stop=tenacity.stop_after_attempt(5),
-        reraise=True,
+@given("I record the current slurmctld controller mode assignments")
+def record_controllers(context: Context) -> None:
+    """Snapshot the current slurm controller modes for stable unit references.
+
+    Subsequent When/Then steps reference units by their recorded mode
+    (primary/backup/...) rather than re-querying ``scontrol ping``, whose
+    mode assignments may shift after failover.
+    """
+    context.scenario_state["ha_controllers"] = _get_slurm_controllers(context)
+
+
+@given(parsers.parse("there are '{down}' down and '{up}' up slurmctld controller machines"))
+def controller_unit_count(context: Context, down: str, up: str) -> None:
+    """Assert the number of down and up slurmctld units by machine status."""
+    juju = context.get_juju()
+    down_count = len(_down_controller_machines(context))
+    up_count = len(juju.status().apps[SLURMCTLD_APP_NAME].units) - down_count
+    assert down_count == int(down), f"expected {down} down units, got {down_count}"
+    assert up_count == int(up), f"expected {up} up units, got {up_count}"
+
+
+@then(
+    parsers.parse(
+        "the slurmctld controller that is {mode} has the hostname recorded for {recorded_mode}"
     )
-    def retry_asserts():
-        new_controllers = _get_slurm_controllers(juju)
-        assert len(new_controllers) == 3, f"expected 3 controllers, got {len(new_controllers)}"
-        # Primary controller must not have changed. New units must be backups
-        assert_hostname(new_controllers, controllers, {"primary": "primary"})
-        assert_pinged(
-            new_controllers,
-            {
-                "primary": "UP",
-                "backup1": "UP",
-                "backup2": "UP",
-            },
+)
+def controller_hostname_unchanged(context: Context, mode: str, recorded_mode: str) -> None:
+    """Assert the current controller's hostname matches the recorded snapshot."""
+    recorded = context.scenario_state["ha_controllers"]
+
+    def check(controllers):
+        assert mode in controllers, f"controller mode '{mode}' not found"
+        assert recorded_mode in recorded, f"recorded mode '{recorded_mode}' not found"
+        actual = controllers[mode]["hostname"]
+        expected = recorded[recorded_mode]["hostname"]
+        assert actual == expected, (
+            f"hostname mismatch for {mode} vs recorded {recorded_mode}: "
+            f"expected '{expected}', got '{actual}'"
         )
 
-    retry_asserts()
+    _wait_for_controllers(context, check)
 
 
-@pytest.mark.order(21)
-def test_slurmctld_scale_down(juju: jubilant.Juju) -> None:
-    """Test scaling down slurmctld by one unit."""
-    controllers = _get_slurm_controllers(juju)
+# ---------------------------------------------------------------------------
+# Controller status assertions
+# ---------------------------------------------------------------------------
 
-    logger.info("checking primary and 2 backup controllers")
-    assert len(controllers) == 3, f"expected 3 controllers, got {len(controllers)}"
-    assert_pinged(
-        controllers,
-        {
-            "primary": "UP",
-            "backup1": "UP",
-            "backup2": "UP",
-        },
-    )
 
-    logger.info("removing backup1 controller")
-    juju.remove_unit(controllers["backup1"]["unit"])
+@given(parsers.parse("the slurmctld controller that is {mode} reports ping status '{status}'"))
+@then(parsers.parse("the slurmctld controller that is {mode} reports ping status '{status}'"))
+def controller_status(context: Context, mode: str, status: str) -> None:
+    """Assert that the controller in the given mode has the given pinged status."""
+
+    def check(controllers):
+        assert mode in controllers, f"controller mode '{mode}' not found"
+        assert controllers[mode]["pinged"] == status, (
+            f"expected {mode} to be '{status}', got '{controllers[mode]['pinged']}'"
+        )
+
+    _wait_for_controllers(context, check)
+
+
+@given(parsers.parse("there are '{count}' slurmctld controllers registered"))
+@then(parsers.parse("there are '{count}' slurmctld controllers registered"))
+def controller_count(context: Context, count: str) -> None:
+    """Assert the number of registered slurm controllers."""
+
+    def check(controllers):
+        assert len(controllers) == int(count), (
+            f"expected {count} controllers, got {len(controllers)}"
+        )
+
+    _wait_for_controllers(context, check)
+
+
+# ---------------------------------------------------------------------------
+# Scale up / down
+# ---------------------------------------------------------------------------
+
+
+@when(parsers.parse("I remove the slurmctld controller that is {mode}"))
+def remove_controller_unit(context: Context, mode: str) -> None:
+    """Remove the slurmctld unit corresponding to the given controller mode.
+
+    ``mode`` is normally a slurmctld ping mode (primary, backup, backup1,
+    ...). The literal value ``down`` is handled specially: the unit whose
+    backing machine is powered off (juju status ``down``) is removed with
+    ``force=True`` rather than being looked up via ``scontrol ping``.
+    """
+    juju = context.get_juju()
+    if mode == "down":
+        down_units = _down_controller_machines(context)
+        assert down_units, "no down controller unit found"
+        down_unit = next(iter(down_units))
+        juju.remove_unit(down_unit, force=True)
+        juju.wait(
+            lambda status: jubilant.all_active(status, *SLURM_APPS),
+            timeout=SLURM_WAIT_TIMEOUT,
+        )
+        return
+
+    controllers = _get_slurm_controllers(context)
+    assert mode in controllers, f"controller mode '{mode}' not found"
+    removed_unit = controllers[mode]["unit"]
+    expected_units = len(juju.status().apps[SLURMCTLD_APP_NAME].units) - 1
+    juju.remove_unit(removed_unit)
     juju.wait(
         lambda status: (
-            len(status.apps[SLURMCTLD_APP_NAME].units) == 2
+            removed_unit not in status.apps[SLURMCTLD_APP_NAME].units
+            and len(status.apps[SLURMCTLD_APP_NAME].units) == expected_units
             and jubilant.all_active(status, *SLURM_APPS)
         ),
-        error=lambda status: jubilant.any_error(status, SLURM_APPS[SLURMCTLD_APP_NAME]),
-        timeout=600,
+        error=lambda status: jubilant.any_error(status, SLURMCTLD_APP_NAME),
+        timeout=SLURM_WAIT_TIMEOUT,
     )
 
-    # Can take time for changes to propagate to login node. Retry if assertions fail
-    @tenacity.retry(
-        wait=tenacity.wait.wait_exponential(multiplier=3, min=10, max=30),
-        stop=tenacity.stop_after_attempt(5),
-        reraise=True,
+
+# ---------------------------------------------------------------------------
+# Service failover / recovery
+# ---------------------------------------------------------------------------
+
+
+@when(
+    parsers.re(
+        r"I (?P<operation>stop|restart) the slurmctld service on the controller that is (?P<mode>\w+)"
     )
-    def retry_asserts():
-        new_controllers = _get_slurm_controllers(juju)
-        assert "backup" in new_controllers
-        assert_hostname(
-            new_controllers,
-            controllers,
-            {
-                "primary": "primary",
-                "backup": "backup2",
-            },
-        )
-        assert_pinged(
-            new_controllers,
-            {
-                "primary": "UP",
-                "backup": "UP",
-            },
-        )
-
-    retry_asserts()
-
-
-@pytest.mark.order(22)
-def test_slurmctld_service_failover(juju: jubilant.Juju) -> None:
-    """Test failover to backup slurmctld after stopping primary service."""
-    login_unit = f"{SACKD_APP_NAME}/0"
-    controllers = _get_slurm_controllers(juju)
+)
+def control_slurmctld_service(context: Context, operation: str, mode: str) -> None:
+    """Stop or restart the slurmctld service on the given controller mode's unit."""
+    juju = context.get_juju()
+    controllers = _controllers(context)
     slurmctld_service = SLURM_APPS[SLURMCTLD_APP_NAME]
-
-    logger.info("checking primary and backup controllers")
-    assert_pinged(
-        controllers,
-        {
-            "primary": "UP",
-            "backup": "UP",
-        },
+    juju.exec(
+        f"sudo systemctl {operation} {slurmctld_service}",
+        unit=controllers[mode]["unit"],
     )
 
-    logger.info("stopping primary controller service")
-    juju.exec(f"sudo systemctl stop {slurmctld_service}", unit=controllers["primary"]["unit"])
 
-    logger.info("triggering failover")
+@then(parsers.parse("the slurm sinfo command succeeds on unit '{unit}'"))
+def sinfo_succeeds(context: Context, unit: str) -> None:
+    """Poll until ``sinfo`` returns successfully on the given unit."""
+    juju = context.get_juju()
 
-    @tenacity.retry(
-        wait=tenacity.wait.wait_exponential(multiplier=3, min=10, max=30),
-        stop=tenacity.stop_after_attempt(5),
-        reraise=True,
-    )
-    def retry_asserts():
-        sinfo_result = juju.exec("sinfo", unit=login_unit, wait=30)
-        assert_sinfo(sinfo_result)
-
-        service_result = juju.exec(
-            f"systemctl status {slurmctld_service}", unit=controllers["backup"]["unit"]
-        )
-        assert "Running as primary controller" in service_result.stdout
-
-    retry_asserts()
-
-
-@pytest.mark.order(23)
-def test_slurmctld_service_recover(juju: jubilant.Juju) -> None:
-    """Test primary resumes control after restarting service."""
-    login_unit = f"{SACKD_APP_NAME}/0"
-    controllers = _get_slurm_controllers(juju)
-    slurmctld_service = SLURM_APPS[SLURMCTLD_APP_NAME]
-
-    logger.info("checking primary and backup controllers")
-    assert_pinged(
-        controllers,
-        {
-            "primary": "DOWN",
-            "backup": "UP",
-        },
-    )
-
-    logger.info("restarting primary controller service")
-    juju.exec(f"sudo systemctl restart {slurmctld_service}", unit=controllers["primary"]["unit"])
-
-    logger.info("testing recovery")
-
-    @tenacity.retry(
-        wait=tenacity.wait.wait_exponential(multiplier=3, min=10, max=30),
-        stop=tenacity.stop_after_attempt(5),
-        reraise=True,
-    )
-    def retry_asserts():
-        sinfo_result = juju.exec("sinfo", unit=login_unit, wait=30)
-        assert_sinfo(sinfo_result)
-
-        primary_service_result = juju.exec(
-            f"systemctl status {slurmctld_service}", unit=controllers["primary"]["unit"]
-        )
-        assert "Running as primary controller" in primary_service_result.stdout
-
-        backup_service_result = juju.exec(
-            f"systemctl status {slurmctld_service}", unit=controllers["backup"]["unit"]
-        )
-        assert "slurmctld running in background mode" in backup_service_result.stdout
-
-    retry_asserts()
-
-
-@pytest.mark.order(24)
-def test_slurmctld_unit_failover(juju: jubilant.Juju) -> None:
-    """Test backup takeover after powering off primary machine."""
-    login_unit = f"{SACKD_APP_NAME}/0"
-    compute_unit = f"{SLURMD_APP_NAME}/0"
-    controllers = _get_slurm_controllers(juju)
-    slurmctld_service = SLURM_APPS[SLURMCTLD_APP_NAME]
-
-    logger.info("checking primary and backup controllers")
-    assert_pinged(
-        controllers,
-        {
-            "primary": "UP",
-            "backup": "UP",
-        },
-    )
-
-    logger.info("powering off primary machine")
-    juju.exec("sudo poweroff", unit=controllers["primary"]["unit"])
-    juju.wait(
-        lambda status: (
-            status.machines[controllers["primary"]["machine"]].juju_status.current == "down"
-        )
-    )
-
-    logger.info("triggering failover")
-
-    @tenacity.retry(
-        wait=tenacity.wait.wait_exponential(multiplier=3, min=10, max=30),
-        stop=tenacity.stop_after_attempt(5),
-        reraise=True,
-    )
-    def retry_asserts():
-        sinfo_result = juju.exec("sinfo", unit=login_unit, wait=30)
-        assert_sinfo(sinfo_result)
-
-        service_result = juju.exec(
-            f"systemctl status {slurmctld_service}", unit=controllers["backup"]["unit"]
-        )
-        assert "Running as primary controller" in service_result.stdout
-
-        logger.info("testing job submission")
-        slurmd_result = juju.exec("hostname -s", unit=compute_unit)
-        sackd_result = juju.exec(
-            f"srun --partition {SLURMD_APP_NAME} hostname -s", unit=login_unit
-        )
-        assert sackd_result.stdout == slurmd_result.stdout
-
-    retry_asserts()
-
-
-@pytest.mark.order(25)
-def test_slurmctld_unit_recover(juju: jubilant.Juju) -> None:
-    """Test primary resumes control after restarting powered-off machine."""
-    login_unit = f"{SACKD_APP_NAME}/0"
-    controllers = _get_slurm_controllers(juju)
-    slurmctld_service = SLURM_APPS[SLURMCTLD_APP_NAME]
-
-    logger.info("checking primary and backup controllers")
-    assert_pinged(
-        controllers,
-        {
-            "primary": "DOWN",
-            "backup": "UP",
-        },
-    )
-    assert_powered_off(juju, controllers["primary"]["machine"], controllers["primary"]["hostname"])
-
-    logger.info("rebooting primary machine")
-    subprocess.check_output(["lxc", "start", controllers["primary"]["hostname"]])
-    juju.wait(lambda status: jubilant.all_active(status, SLURMCTLD_APP_NAME))
-
-    logger.info("testing recovery")
-
-    @tenacity.retry(
-        wait=tenacity.wait.wait_exponential(multiplier=3, min=10, max=30),
-        stop=tenacity.stop_after_attempt(5),
-        reraise=True,
-    )
-    def retry_asserts():
-        sinfo_result = juju.exec("sinfo", unit=login_unit, wait=30)
-        assert_sinfo(sinfo_result)
-
-        primary_service_result = juju.exec(
-            f"systemctl status {slurmctld_service}", unit=controllers["primary"]["unit"]
-        )
-        assert "Running as primary controller" in primary_service_result.stdout
-
-        backup_service_result = juju.exec(
-            f"systemctl status {slurmctld_service}", unit=controllers["backup"]["unit"]
-        )
-        assert "slurmctld running in background mode" in backup_service_result.stdout
-
-    retry_asserts()
-
-
-@pytest.mark.order(26)
-def test_slurmctld_scale_up_degraded(juju: jubilant.Juju) -> None:
-    """Test scaling up slurmctld by one unit while primary unit failed."""
-    controllers = _get_slurm_controllers(juju)
-
-    assert_pinged(controllers, {"primary": "UP"})
-
-    logger.info("powering off primary machine")
-    juju.exec("sudo poweroff", unit=controllers["primary"]["unit"])
-    juju.wait(
-        lambda status: (
-            status.machines[controllers["primary"]["machine"]].juju_status.current == "down"
-        )
-    )
-
-    logger.info("checking primary and backup controllers")
-    controllers = _get_slurm_controllers(juju)
-    assert_pinged(
-        controllers,
-        {
-            "primary": "DOWN",
-            "backup": "UP",
-        },
-    )
-    assert_powered_off(juju, controllers["primary"]["machine"], controllers["primary"]["hostname"])
-
-    logger.info("adding controller")
-    juju.add_unit(SLURMCTLD_APP_NAME)
-
-    def two_controllers_active(status: jubilant.Status) -> bool:
-        """Return True if there are exactly 3 slurmctld units and 2 are active. False otherwise."""
-        units = status.apps[SLURMCTLD_APP_NAME].units
-        if len(units) != 3:
+    def ready(_ctx: Context) -> bool:
+        try:
+            result = juju.exec("sinfo", unit=unit, wait=30)
+            return result.return_code == 0
+        except Exception:
             return False
 
-        active_count = sum(1 for unit in units.values() if unit.is_active)
-        return active_count == 2
+    context.wait(ready=ready)
 
-    juju.wait(two_controllers_active, timeout=SLURM_WAIT_TIMEOUT)
 
-    @tenacity.retry(
-        wait=tenacity.wait.wait_exponential(multiplier=3, min=10, max=30),
-        stop=tenacity.stop_after_attempt(5),
-        reraise=True,
+_SERVICE_STATES = {
+    "running as primary": "Running as primary controller",
+    "running in background mode": "slurmctld running in background mode",
+}
+
+
+@then(
+    parsers.re(
+        r"the slurmctld service on the controller that is (?P<mode>\w+) "
+        r"is (?P<state>running as primary|running in background mode)"
     )
-    def retry_asserts():
-        new_controllers = _get_slurm_controllers(juju)
-        assert len(new_controllers) == 3, f"expected 3 controllers, got {len(controllers)}"
-        assert_hostname(
-            new_controllers,
-            controllers,
-            {
-                "primary": "primary",
-                "backup1": "backup",
-            },
-        )
-        assert_pinged(
-            new_controllers,
-            {
-                "primary": "DOWN",
-                "backup1": "UP",
-                "backup2": "UP",
-            },
-        )
+)
+def controller_service_state(context: Context, mode: str, state: str) -> None:
+    """Assert the service on the given controller mode reports the given state.
 
-    retry_asserts()
+    Polls ``systemctl status`` until the expected state substring appears,
+    e.g. "Running as primary controller" after a failover, or "slurmctld
+    running in background mode" once a backup demotes itself.
+    """
+    juju = context.get_juju()
+    controllers = _controllers(context)
+    slurmctld_service = SLURM_APPS[SLURMCTLD_APP_NAME]
+    unit = controllers[mode]["unit"]
+    expected = _SERVICE_STATES[state]
+
+    def ready(_ctx: Context) -> bool:
+        try:
+            result = juju.exec(
+                f"systemctl status {slurmctld_service}",
+                unit=unit,
+            )
+            logger.debug(
+                "service status on '%s':\nreturn_code=%s\nstdout=%s\nstderr=%s",
+                unit,
+                result.return_code,
+                result.stdout,
+                result.stderr,
+            )
+            return expected in result.stdout
+        except Exception as exc:
+            logger.debug("service status check on '%s' raised: %s", unit, exc)
+            return False
+
+    context.wait(ready=ready)
 
 
-@pytest.mark.order(27)
-def test_slurmctld_remove_failed_controller(juju: jubilant.Juju) -> None:
-    """Test removing failed controller slurmctld unit."""
-    status = juju.status()
-    down = []
-    not_down = []
-    for unit, unit_status in status.apps[SLURMCTLD_APP_NAME].units.items():
-        if status.machines[unit_status.machine].juju_status.current == "down":
-            down.append(unit)
-        else:
-            not_down.append(unit)
-    assert len(down) == 1 and len(not_down) == 2, (
-        f"expected 1 down controller and 2 others, got {len(down)} down and {len(not_down)} others"
+# ---------------------------------------------------------------------------
+# Compute node scheduling precondition
+# ---------------------------------------------------------------------------
+
+
+@given(
+    parsers.parse(
+        "the slurmd node for unit '{compute_unit}' is schedulable according to scontrol from unit '{login_unit}'"
+    )
+)
+def node_is_schedulable(context: Context, compute_unit: str, login_unit: str) -> None:
+    """Ensure the compute node is schedulable before testing failover.
+
+    Queries ``scontrol show node`` from the login unit. If the node is not
+    in a schedulable state (e.g. ``DOWN``), runs the ``set-node-state``
+    action on the recorded primary controller to set it to ``idle``, then
+    polls until the node is schedulable.
+
+    This makes the HA feature self-contained: it does not rely on the
+    node-operations feature having already put the node into ``IDLE``.
+    """
+    juju = context.get_juju()
+    name = node_name(compute_unit)
+    controllers = _controllers(context)
+    action_unit = controllers["primary"]["unit"]
+
+    non_schedulable = {"DOWN", "DRAIN", "FAIL", "FAILING", "RESERVED", "UNKNOWN"}
+
+    def _node_state() -> tuple[list[str], str]:
+        """Return (states, reason) for the compute node, querying from login."""
+        data = scontrol_show_node(context, login_unit, name)
+        nodes = data.get("nodes", [])
+        if not nodes:
+            return [], "node not found"
+        states = nodes[0].get("state", [])
+        if isinstance(states, str):
+            states = [states]
+        reason = nodes[0].get("reason", "")
+        return states, reason
+
+    def _is_schedulable(states: list[str]) -> bool:
+        return bool(states) and not any(s in non_schedulable for s in states)
+
+    states, reason = _node_state()
+    logger.debug(
+        "node_is_schedulable: node '%s' initial state=%s, reason=%s",
+        name,
+        states,
+        reason,
     )
 
-    down_unit = down[0]
-    logger.info("removing failed controller: '%s'", down_unit)
-    juju.remove_unit(down_unit, force=True)  # force necessary for a failed unit
-    juju.wait(lambda status: jubilant.all_active(status, *SLURM_APPS))
-
-    @tenacity.retry(
-        wait=tenacity.wait.wait_exponential(multiplier=3, min=10, max=30),
-        stop=tenacity.stop_after_attempt(5),
-        reraise=True,
-    )
-    def retry_asserts():
-        new_controllers = _get_slurm_controllers(juju)
-        assert "backup" in new_controllers
-        assert_pinged(
-            new_controllers,
-            {
-                "primary": "UP",
-                "backup": "UP",
-            },
+    if not _is_schedulable(states):
+        logger.info(
+            "node_is_schedulable: node '%s' is not schedulable (state=%s). "
+            "Running set-node-state action on unit '%s' to set state=idle.",
+            name,
+            states,
+            action_unit,
         )
+        juju.run(action_unit, "set-node-state", params={"nodes": name, "state": "idle"})
 
-    retry_asserts()
+    def ready(_ctx: Context) -> bool:
+        try:
+            states, reason = _node_state()
+            logger.debug(
+                "node_is_schedulable: polling node '%s' state=%s, reason=%s",
+                name,
+                states,
+                reason,
+            )
+            return _is_schedulable(states)
+        except Exception as exc:
+            logger.debug("node_is_schedulable: polling node '%s' raised: %s", name, exc)
+            return False
+
+    context.wait(ready=ready)
+
+
+# ---------------------------------------------------------------------------
+# Machine power off / reboot
+# ---------------------------------------------------------------------------
+
+
+@when("I power off the primary slurmctld machine")
+def power_off_primary(context: Context) -> None:
+    """Power off the primary controller's machine."""
+    juju = context.get_juju()
+    controllers = _controllers(context)
+    juju.exec("sudo poweroff", unit=controllers["primary"]["unit"])
+    machine_id = controllers["primary"]["machine"]
+    juju.wait(
+        lambda status: _machine_is_down(status, machine_id),
+        timeout=SLURM_WAIT_TIMEOUT,
+    )
+
+
+@given("the primary slurmctld machine is powered off")
+@then("the primary slurmctld machine is powered off")
+def primary_machine_off(context: Context) -> None:
+    """Assert the primary controller's machine juju status is 'down'."""
+    juju = context.get_juju()
+    controllers = _controllers(context)
+    machine_id = controllers["primary"]["machine"]
+
+    def ready(_ctx: Context) -> bool:
+        return _machine_is_down(juju.status(), machine_id)
+
+    context.wait(ready=ready)
+
+
+@when("I reboot the primary slurmctld machine")
+def reboot_primary_machine(context: Context) -> None:
+    """Start the powered-off primary machine via lxc."""
+    controllers = _controllers(context)
+    hostname = controllers["primary"]["hostname"]
+    subprocess.check_output(["lxc", "start", hostname])

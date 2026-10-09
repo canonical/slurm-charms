@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,70 +12,50 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""`oci-runtime` integration tests for the Slurm charms."""
+"""BDD step definitions for Slurm OCI runtime (Apptainer) scheduling."""
 
 import logging
 from io import StringIO
-from time import sleep
 
-import jubilant
 import pytest
-from constants import (
-    APPTAINER_APP_NAME,
-    DEFAULT_APPTAINER_CHARM_CHANNEL,
-    SACKD_APP_NAME,
-    SLURMCTLD_APP_NAME,
-    SLURMD_APP_NAME,
-)
+from constants import SLURMD_APP_NAME
 from dotenv import dotenv_values
+from pytest_bdd import parsers, scenarios, then
+from pytest_jubilant_bdd import Context
 
 logger = logging.getLogger(__name__)
 
+pytestmark = pytest.mark.order(13)
 
-def setup_apptainer(juju: jubilant.Juju, base: str) -> None:
-    """Deploy and integrate `apptainer` with `slurmctld` and `slurmd`.
+scenarios("features/slurm_oci_runtime.feature")
 
-    Notes:
-        - Sleep for five seconds after the `apptainer` app reaches active status
-          to give the cluster enough time to reconfigure.
-    """
-    logger.info("deploy '%s'", APPTAINER_APP_NAME)
-    juju.deploy(APPTAINER_APP_NAME, channel=DEFAULT_APPTAINER_CHARM_CHANNEL, base=base)
 
-    logger.info(
-        "integration '%s' application with '%s' application",
-        APPTAINER_APP_NAME,
-        SLURMCTLD_APP_NAME,
+@then(
+    parsers.parse(
+        "a slurm apptainer container job submitted from unit '{login_unit}' "
+        "runs on unit '{compute_unit}'"
     )
-    juju.integrate(APPTAINER_APP_NAME, SLURMCTLD_APP_NAME)
-    logger.info(
-        "integration '%s' application with '%s' application",
-        APPTAINER_APP_NAME,
-        SLURMD_APP_NAME,
-    )
-    juju.integrate(APPTAINER_APP_NAME, SLURMD_APP_NAME)
+)
+def apptainer_oci_scheduling(context: Context, login_unit: str, compute_unit: str) -> None:
+    """Pull an OCI image and run a Slurm job inside an Apptainer container."""
+    juju = context.get_juju()
 
-    juju.wait(lambda status: jubilant.all_active(status, APPTAINER_APP_NAME))
-    sleep(5)
+    def apptainer_ready(_ctx: Context) -> bool:
+        try:
+            juju.exec("apptainer --version", unit=compute_unit)
+            return True
+        except Exception:
+            return False
 
+    context.wait(ready=apptainer_ready)
 
-@pytest.mark.order(13)
-def test_apptainer_oci_scheduling(juju: jubilant.Juju, base: str) -> None:
-    """Test that Slurm can schedule jobs using Apptainer."""
-    if APPTAINER_APP_NAME not in juju.status().apps:
-        setup_apptainer(juju, base)
-
-    sackd_unit = f"{SACKD_APP_NAME}/0"
-    slurmd_unit = f"{SLURMD_APP_NAME}/0"
-
-    logger.info("testing that '%s' is running jobs within OCI images", APPTAINER_APP_NAME)
     juju.exec(
         "apptainer pull /tmp/jammy.sif docker://ghcr.io/charmed-hpc/ubuntu-test:jammy",
-        unit=slurmd_unit,
+        unit=compute_unit,
     )
     result = juju.exec(
         f"cd /tmp; srun -p {SLURMD_APP_NAME} --container=/tmp/jammy.sif cat /etc/os-release",
-        unit=sackd_unit,
+        unit=login_unit,
     ).stdout.strip()
     env = dotenv_values(stream=StringIO(result))
 

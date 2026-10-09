@@ -92,4 +92,4 @@ jobs:
           if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.enable_ha }}" == "true" ]]; then
             ARGS+=("--run-high-availability")
           fi
-          just integration -- --charm-base=${{ matrix.bases }} ${ARGS[*]}
+          just integration -- --juju-bdd-wait-timeout=1200 --charm-base=${{ matrix.bases }} ${ARGS[*]}

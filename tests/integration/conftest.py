@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023-2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,45 +16,17 @@
 """Configure Slurm charm integration tests."""
 
 import logging
-import os
+import uuid
 from collections.abc import Iterator
-from pathlib import Path
 
-import jubilant
 import pytest
+from aiosmtpd.controller import Controller
+from constants import NETWORK_INTERFACE, SLURMD_APP_NAME, SMTP_SERVER_PORT
+from pytest_bdd import parsers, then
+from pytest_jubilant_bdd import Context
+from utils import MailHandler, interface_ipv4
 
 logger = logging.getLogger(__name__)
-LOCAL_SACKD = Path(sackd) if (sackd := os.getenv("LOCAL_SACKD")) else None
-LOCAL_SLURMCTLD = Path(slurmctld) if (slurmctld := os.getenv("LOCAL_SLURMCTLD")) else None
-LOCAL_SLURMD = Path(slurmd) if (slurmd := os.getenv("LOCAL_SLURMD")) else None
-LOCAL_SLURMDBD = Path(slurmdbd) if (slurmdbd := os.getenv("LOCAL_SLURMDBD")) else None
-LOCAL_SLURMRESTD = Path(slurmrestd) if (slurmrestd := os.getenv("LOCAL_SLURMRESTD")) else None
-
-
-@pytest.fixture(scope="session")
-def juju(request: pytest.FixtureRequest) -> Iterator[jubilant.Juju]:
-    """Yield wrapper for interfacing with the `juju` CLI command."""
-    keep_models = bool(request.config.getoption("--keep-models"))
-
-    with jubilant.temp_model(keep=keep_models) as juju:
-        juju.wait_timeout = 60 * 60  # Timeout after 1 hour.
-
-        yield juju
-
-        if request.session.testsfailed:
-            log = juju.debug_log(limit=3000)
-            print(log, end="")
-
-
-@pytest.fixture(scope="function")
-def fast_forward(juju: jubilant.Juju) -> Iterator[None]:
-    """Temporarily increase the rate of `update-status` event fires to 10s."""
-    old_interval = juju.model_config()["update-status-hook-interval"]
-    juju.model_config({"update-status-hook-interval": "10s"})
-
-    yield
-
-    juju.model_config({"update-status-hook-interval": old_interval})
 
 
 @pytest.fixture(scope="module")
@@ -64,98 +36,73 @@ def base(request: pytest.FixtureRequest) -> str:
 
 
 @pytest.fixture(scope="module")
-def sackd(request: pytest.FixtureRequest) -> Path | str:
-    """Get `sackd` charm to use for the integration tests.
-
-    If the `LOCAL_SACKD` environment variable is not set,
-    the `sackd` charm will be pulled from the `latest/edge` channel
-    on Charmhub instead.
-
-    Returns:
-        `Path` object if using a local `sackd` charm. `str` if pulling from Charmhub.
-    """
-    if not LOCAL_SACKD:
-        logger.info("pulling `sackd` charm from the `latest/edge` channel on charmhub")
-        return "sackd"
-
-    logger.info("using local `sackd` charm located at %s", LOCAL_SACKD)
-    return LOCAL_SACKD
+def smtp_handler() -> Iterator[MailHandler]:
+    """Start a local SMTP server capturing Slurm notification emails."""
+    handler = MailHandler()
+    ip_address = interface_ipv4(NETWORK_INTERFACE)
+    controller = Controller(handler, hostname=ip_address, port=SMTP_SERVER_PORT)
+    controller.start()
+    try:
+        yield handler
+    finally:
+        controller.stop()
 
 
-@pytest.fixture(scope="module")
-def slurmctld(request: pytest.FixtureRequest) -> Path | str:
-    """Get `slurmctld` charm to use for the integration tests.
+@then(
+    parsers.parse(
+        "a slurm srun job submitted from unit '{login_unit}' runs on unit '{compute_unit}'"
+    )
+)
+def job_submission(context: Context, login_unit: str, compute_unit: str) -> None:
+    """Submit a job from the login node and verify it runs on the compute node."""
+    juju = context.get_juju()
+    slurmd_result = juju.exec("hostname -s", unit=compute_unit)
+    completed_jobs: list[str] = []
 
-    If the `LOCAL_SLURMCTLD` environment variable is not set,
-    the `sackd` charm will be pulled from the `latest/edge` channel
-    on Charmhub instead.
+    def ready(_ctx: Context) -> bool:
+        try:
+            job_name = f"bdd-{uuid.uuid4().hex[:8]}"
+            sackd_result = juju.exec(
+                f"srun -J {job_name} --partition {SLURMD_APP_NAME} hostname -s",
+                unit=login_unit,
+                wait=120,
+            )
+            if not sackd_result.success:
+                logger.debug(
+                    "srun job '%s' failed (return_code=%s): stdout='%s', stderr='%s'",
+                    job_name,
+                    sackd_result.return_code,
+                    sackd_result.stdout,
+                    sackd_result.stderr,
+                )
+                return False
+            if sackd_result.stdout != slurmd_result.stdout:
+                logger.debug(
+                    "srun job '%s' output mismatch: srun stdout='%s', slurmd hostname='%s'",
+                    job_name,
+                    sackd_result.stdout,
+                    slurmd_result.stdout,
+                )
+                return False
+            completed_jobs.append(job_name)
+            return True
+        except Exception as exc:
+            logger.debug("srun job attempt raised exception: %s", exc)
+            return False
 
-    Returns:
-        `Path` object if using a local `slurmctld` charm. `str` if pulling from Charmhub.
-    """
-    if not LOCAL_SLURMCTLD:
-        logger.info("pulling `slurmctld` charm from the `latest/edge` channel on charmhub")
-        return "slurmctld"
+    context.wait(ready=ready, timeout=600)
 
-    logger.info("using local `slurmctld` charm located at %s", LOCAL_SLURMCTLD)
-    return LOCAL_SLURMCTLD
-
-
-@pytest.fixture(scope="module")
-def slurmd(request: pytest.FixtureRequest) -> Path | str:
-    """Get `slurmd` charm to use for the integration tests.
-
-    If the `LOCAL_SLURMD` environment variable is not set,
-    the `sackd` charm will be pulled from the `latest/edge` channel
-    on Charmhub instead.
-
-    Returns:
-        `Path` object if using a local `slurmd` charm. `str` if pulling from Charmhub.
-    """
-    if not LOCAL_SLURMD:
-        logger.info("pulling `slurmd` charm from the `latest/edge` channel on charmhub")
-        return "slurmd"
-
-    logger.info("using local `slurmd` charm located at %s", LOCAL_SLURMD)
-    return LOCAL_SLURMD
-
-
-@pytest.fixture(scope="module")
-def slurmdbd(request: pytest.FixtureRequest) -> Path | str:
-    """Get `slurmdbd` charm to use for the integration tests.
-
-    If the `LOCAL_SLURMDBD` environment variable is not set,
-    the `sackd` charm will be pulled from the `latest/edge` channel
-    on Charmhub instead.
-
-    Returns:
-        `Path` object if using a local `slurmdbd` charm. `str` if pulling from Charmhub.
-    """
-    if not LOCAL_SLURMDBD:
-        logger.info("pulling `slurmdbd` charm from the `latest/edge` channel on charmhub")
-        return "slurmdbd"
-
-    logger.info("using local `slurmdbd` charm located at %s", LOCAL_SLURMDBD)
-    return LOCAL_SLURMDBD
-
-
-@pytest.fixture(scope="module")
-def slurmrestd(request: pytest.FixtureRequest) -> Path | str:
-    """Get `slurmrestd` charm to use for the integration tests.
-
-    If the `LOCAL_SLURMRESTD` environment variable is not set,
-    the `sackd` charm will be pulled from the `latest/edge` channel
-    on Charmhub instead.
-
-    Returns:
-        `Path` object if using a local `slurmrestd` charm. `str` if pulling from Charmhub.
-    """
-    if not LOCAL_SLURMRESTD:
-        logger.info("pulling `slurmrestd` charm from the `latest/edge` channel on charmhub")
-        return "slurmrestd"
-
-    logger.info("using local `slurmrestd` charm located at %s", LOCAL_SLURMRESTD)
-    return LOCAL_SLURMRESTD
+    for job_name in completed_jobs[-3:]:
+        sacct_result = juju.exec(
+            f"sacct --name={job_name} --format=State --noheader --parsable2",
+            unit=login_unit,
+        )
+        assert sacct_result.success
+        states = [s.strip() for s in sacct_result.stdout.strip().splitlines() if s.strip()]
+        assert states, f"no sacct record found for job '{job_name}'"
+        assert any("COMPLETED" in s for s in states), (
+            f"job '{job_name}' did not complete, states: {states}"
+        )
 
 
 def pytest_addoption(parser) -> None:
@@ -183,6 +130,10 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "high_availability: marks tests for slurmctld high availability"
     )
+    if config.getoption("--keep-models"):
+        # pytest-jubilant-bdd owns model teardown and only honors its own
+        # `--juju-bdd-no-teardown` flag, so forward `--keep-models` to it.
+        config.option.juju_bdd_no_teardown = True
 
 
 def pytest_collection_modifyitems(config, items):
