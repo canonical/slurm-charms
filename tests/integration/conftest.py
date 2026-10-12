@@ -36,7 +36,12 @@ def juju(request: pytest.FixtureRequest) -> Iterator[jubilant.Juju]:
     """Yield wrapper for interfacing with the `juju` CLI command."""
     keep_models = bool(request.config.getoption("--keep-models"))
 
-    with jubilant.temp_model(keep=keep_models) as juju:
+    config = None
+    if cloud_config := request.config.getoption("--cloudinit-userdata"):
+        # `cloudinit-userdata` is applied to all machines provisioned on the model.
+        config = {"cloudinit-userdata": cloud_config.read_text()}
+
+    with jubilant.temp_model(keep=keep_models, config=config) as juju:
         juju.wait_timeout = 60 * 60  # Timeout after 1 hour.
 
         yield juju
@@ -164,6 +169,15 @@ def pytest_addoption(parser) -> None:
         action="store",
         default="ubuntu@26.04",
         help="the base to deploy the slurm charms on during the integration tests",
+    )
+    parser.addoption(
+        "--cloudinit-userdata",
+        action="store",
+        default=None,
+        help=(
+            "path to a cloud-config file to apply as `cloudinit-userdata` "
+            "on all machines in the test model"
+        ),
     )
     parser.addoption(
         "--keep-models",
