@@ -18,7 +18,9 @@
 import logging
 import uuid
 from collections.abc import Iterator
+from pathlib import Path
 
+import jubilant
 import pytest
 from aiosmtpd.controller import Controller
 from constants import NETWORK_INTERFACE, SLURMD_APP_NAME, SMTP_SERVER_PORT
@@ -101,6 +103,15 @@ def job_submission(context: Context, login_unit: str, compute_unit: str) -> None
 
 def pytest_addoption(parser) -> None:
     parser.addoption(
+        "--cloudinit-userdata",
+        action="store",
+        default=None,
+        help=(
+            "path to a cloud-config file to apply as `cloudinit-userdata` "
+            "on all machines in the test model"
+        ),
+    )
+    parser.addoption(
         "--run-high-availability",
         action="store_true",
         default=False,
@@ -112,6 +123,28 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "high_availability: marks tests for slurmctld high availability"
     )
+
+    userdata_path = config.getoption("--cloudinit-userdata")
+    if not userdata_path:
+        return
+
+    userdata_file = Path(userdata_path)
+    if not userdata_file.is_file():
+        raise pytest.UsageError(
+            f"`--cloudinit-userdata` must be a path to a cloud-config file, got '{userdata_path}'"
+        )
+
+    userdata = userdata_file.read_text()
+    _add_model = jubilant.Juju.add_model
+
+    # TODO: determine if there is a less intrusive way to do this e.g.
+    #       maybe adding native support for this on pytest-jubilant-bdd?
+    def add_model(self, model, *args, **kwargs):
+        """Apply `cloudinit-userdata` to every model created during the test session."""
+        kwargs.setdefault("config", {"cloudinit-userdata": userdata})
+        return _add_model(self, model, *args, **kwargs)
+
+    jubilant.Juju.add_model = add_model  # type: ignore[method-assign]
 
 
 def pytest_collection_modifyitems(config, items):

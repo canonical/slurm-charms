@@ -88,6 +88,32 @@ baseline integration test suite. However, we strongly recommend running
 `just integration -- --run-high-availability` locally before submitting, as the full suite
 includes additional coverage to catch more complex cases relating to charm scaling.
 
+### Testing against a new Slurm PPA
+
+It is possible to tests future versions of Slurm by using a PPA that packages
+that version. To do this, write a cloud-config file that registers the PPA and pass
+its path to the integration tests using the `--cloudinit-userdata` flag:
+
+```shell
+just integration -- --cloudinit-userdata=/path/to/cloud-config.yaml
+```
+
+The tests pass the file to Juju as `cloudinit-userdata` model config, and Juju applies
+it to every machine in the test model. For example, the following cloud-config adds the
+[ubuntu-hpc Slurm 26.05 PPA] so that the test machines install Slurm 26.05 packages
+instead of the version in the Ubuntu 26.04 (Resolute) archive:
+
+```yaml
+#cloud-config
+apt:
+  sources:
+    slurm-wlm-26.05:
+      source: ppa:ubuntu-hpc/slurm-wlm-26.05
+package_update: true
+```
+
+[ubuntu-hpc Slurm 26.05 PPA]: https://launchpad.net/~ubuntu-hpc/+archive/ubuntu/slurm-wlm-26.05
+
 ## Maintenance information
 
 This repository uses Github Actions to handle some tasks related to the maintenance of the repository.
