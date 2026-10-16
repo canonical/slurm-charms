@@ -47,7 +47,7 @@ dev = [
     "ops[testing] ~= 3.8.1",
     "python-dotenv~=1.2",
     "pyfakefs == 6.2.0",
-    "pytest-mock ~= 3.15",
+    "pytest-mock ~= 3.16",
     "coverage[toml]",
     "psutil ~= 7.2",
 
