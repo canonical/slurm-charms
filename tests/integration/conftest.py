@@ -16,12 +16,14 @@
 """Configure Slurm charm integration tests."""
 
 import logging
+import shlex
 import uuid
 from collections.abc import Iterator
 
 import pytest
 from aiosmtpd.controller import Controller
 from constants import NETWORK_INTERFACE, SLURMD_APP_NAME, SMTP_SERVER_PORT
+from jubilant import Task
 from pytest_bdd import parsers, then
 from pytest_jubilant_bdd import Context
 from utils import MailHandler, interface_ipv4
@@ -99,6 +101,123 @@ def job_submission(context: Context, login_unit: str, compute_unit: str) -> None
         )
 
 
+# ---------------------------------------------------------------------------
+# Unprivileged-user command probes (shared by the security features)
+# ---------------------------------------------------------------------------
+
+# Output fragments that indicate an authorization denial.
+_DENIAL_PATTERNS = (
+    "permission denied",
+    "access denied",
+    "operation not permitted",
+    "not permitted",
+    "unauthorized",
+    "invalid user",
+    "must be root",
+    "only user root",
+    "only the root",
+    "superuser",
+    "super user",
+    "insufficient privilege",
+    "authentication required",
+    "authentication is required",
+)
+
+# Output fragments that indicate the probe itself is broken (missing binary
+# or file) rather than denied. A denial scenario must never pass on these.
+_VACUOUS_PATTERNS = (
+    "command not found",
+    "no such file or directory",
+    "usage:",
+)
+
+
+def _exec_as_user(context: Context, command: str, unit: str, user: str) -> Task:
+    """Execute a command on a unit as an unprivileged user via sudo."""
+    juju = context.get_juju()
+    return juju.exec(f"sudo -u {user} sh -c {shlex.quote(command)}", unit=unit)
+
+
+@then(parsers.parse("the command '{command}' on unit '{unit}' as user '{user}' succeeds"))
+def command_as_user_succeeds(context: Context, command: str, unit: str, user: str) -> None:
+    """Assert a command run as an unprivileged user exits successfully."""
+    result = _exec_as_user(context, command, unit, user)
+    assert result.success, (
+        f"'{command}' as '{user}' on '{unit}' failed "
+        f"(rc={result.return_code}): {result.stderr.strip()}"
+    )
+
+
+@then(parsers.parse("the command '{command}' on unit '{unit}' as user '{user}' is denied"))
+def command_as_user_is_denied(context: Context, command: str, unit: str, user: str) -> None:
+    """Assert a command run as an unprivileged user is rejected on authorization grounds.
+
+    A nonzero exit alone proves nothing: a missing binary or absent file
+    also exits nonzero. Require a recognizable denial message and reject
+    the known vacuous failures, failing loudly with the observed output.
+    """
+    result = _exec_as_user(context, command, unit, user)
+    output = f"{result.stdout}\n{result.stderr}".lower()
+    assert not result.success, (
+        f"'{command}' as '{user}' on '{unit}' succeeded, expected denial: {result.stdout.strip()}"
+    )
+    assert not any(pattern in output for pattern in _VACUOUS_PATTERNS), (
+        f"'{command}' as '{user}' on '{unit}' failed for a non-authorization reason "
+        f"(broken probe, not a denial): {output.strip()}"
+    )
+    assert any(pattern in output for pattern in _DENIAL_PATTERNS), (
+        f"'{command}' as '{user}' on '{unit}' failed without a recognizable "
+        f"denial message: {output.strip()}"
+    )
+
+
+@then(
+    parsers.parse(
+        "the output of '{command}' on unit '{unit}' as user '{user}' contains '{expected}'"
+    )
+)
+def output_as_user_contains(
+    context: Context, command: str, unit: str, user: str, expected: str
+) -> None:
+    """Assert the output of a command run as an unprivileged user contains text.
+
+    The exit code is deliberately not asserted: probes such as `grep -c`
+    legitimately exit nonzero while printing the expected output.
+    """
+    result = _exec_as_user(context, command, unit, user)
+    output = f"{result.stdout}\n{result.stderr}"
+    assert expected in output, (
+        f"expected '{expected}' in output of '{command}' as '{user}' on '{unit}', "
+        f"got: {output.strip()}"
+    )
+
+
+@then(
+    parsers.parse(
+        "the output of '{command}' on unit '{unit}' as user '{user}' does not contain "
+        "'{unexpected}'"
+    )
+)
+def output_as_user_does_not_contain(
+    context: Context, command: str, unit: str, user: str, unexpected: str
+) -> None:
+    """Assert the output of a command run as an unprivileged user lacks text.
+
+    The command must succeed: an absent string in the output of a failed
+    command proves nothing.
+    """
+    result = _exec_as_user(context, command, unit, user)
+    assert result.success, (
+        f"'{command}' as '{user}' on '{unit}' failed "
+        f"(rc={result.return_code}): {result.stderr.strip()}"
+    )
+    output = f"{result.stdout}\n{result.stderr}"
+    assert unexpected not in output, (
+        f"unexpected '{unexpected}' in output of '{command}' as '{user}' on '{unit}': "
+        f"{output.strip()}"
+    )
+
+
 def pytest_addoption(parser) -> None:
     parser.addoption(
         "--run-high-availability",
@@ -112,6 +231,8 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "high_availability: marks tests for slurmctld high availability"
     )
+    config.addinivalue_line("markers", "security: gherkinator test type classification")
+    config.addinivalue_line("markers", "planned: gherkinator test status classification")
 
 
 def pytest_collection_modifyitems(config, items):
