@@ -1,4 +1,4 @@
-# Copyright 2026 Canonical Ltd.
+# Copyright 2024-2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ pytestmark = pytest.mark.order(12)
 scenarios("features/slurm_job_submission.feature")
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def mock_gpu_cleanup() -> Iterator[list[Callable[[], None]]]:
     """Registry of teardown callables run after the scenario, in reverse order.
 

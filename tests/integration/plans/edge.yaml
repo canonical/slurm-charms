@@ -12,22 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# gherkinator test plan for the Slurm charms BDD migration.
-#
-# This file is the SINGLE SOURCE OF TRUTH for every BDD scenario in this
-# repo. Edit it with `gherkinator edit`, validate with `gherkinator
-# validate`, and regenerate the .feature files with:
-#
-#   gherkinator generate --format gh tests/integration/plans/edge.yaml \
-#     --output-dir tests/integration/features
-#
-# Do NOT hand-edit the generated .feature files — they are overwritten on
-# every `gherkinator generate`.
-#
-# Step definitions live in tests/integration/test_*.py. Cross-file ordering
-# is preserved via @pytest.mark.order on each scenario-loading module. The
-# `type`/`status`/`risk` fields become Gherkin tags via gherkinator.
-
 ---
 feature: "Slurm cluster deployment"
 type: functional
