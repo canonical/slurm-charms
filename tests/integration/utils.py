@@ -17,12 +17,15 @@
 import json
 import logging
 import re
+import shlex
 import socket
 from email import message_from_string, policy
 from email.message import EmailMessage
 from typing import Any
 
+from jubilant import Task, TaskError
 from psutil import net_if_addrs
+from pytest_jubilant_bdd import Context
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,78 @@ def scontrol_show_node(context, unit: str, name: str) -> dict[str, Any]:
 def node_name(unit: str) -> str:
     """Convert ``app/N`` into the Slurm node name ``app-N``."""
     return unit.replace("/", "-")
+
+
+# Output fragments that indicate an authorization denial.
+DENIAL_PATTERNS = (
+    "permission denied",
+    "access denied",
+    "operation not permitted",
+    "not permitted",
+    "unauthorized",
+    "invalid user",
+    "must be root",
+    "only root",
+    "only user root",
+    "only the root",
+    "requested uid",
+    "superuser",
+    "super user",
+    "insufficient privilege",
+    "authentication required",
+    "authentication is required",
+    # `sbatch --uid=<user>` impersonation attempt. Message verified in
+    # SchedMD slurm_opt.c arg_set_uid() and unchanged across 24.11-25.11:
+    # the client rejects --uid for any caller whose uid is not 0 before
+    # contacting slurmctld.
+    "only permitted by root",
+)
+
+# Output fragments that indicate the probe itself is broken (missing binary
+# or file) rather than denied. A denial scenario must never pass on these.
+VACUOUS_PATTERNS = (
+    "command not found",
+    "no such file or directory",
+    "usage:",
+)
+
+
+def exec_as_user(
+    context: Context, command: str, unit: str, user: str, wait: int | None = None
+) -> Task:
+    """Execute a command on a unit as an unprivileged user via sudo.
+
+    jubilant's ``exec`` raises ``TaskError`` when the command exits nonzero,
+    but denial probes expect failure; the raised task is recovered so
+    callers can inspect its output and return code. ``wait`` bounds each
+    invocation, mirroring ``juju.exec``'s ``wait`` parameter.
+    """
+    juju = context.get_juju()
+    try:
+        return juju.exec(f"sudo -u {user} sh -c {shlex.quote(command)}", unit=unit, wait=wait)
+    except TaskError as exc:
+        return exc.task
+
+
+def assert_command_denied(result: Task, command: str, unit: str, user: str) -> None:
+    """Assert a task run as an unprivileged user was denied on authorization grounds.
+
+    A nonzero exit alone proves nothing: a missing binary or absent file
+    also exits nonzero. Require a recognizable denial message and reject
+    the known vacuous failures, failing loudly with the observed output.
+    """
+    output = f"{result.stdout}\n{result.stderr}".lower()
+    assert not result.success, (
+        f"'{command}' as '{user}' on '{unit}' succeeded, expected denial: {result.stdout.strip()}"
+    )
+    assert not any(pattern in output for pattern in VACUOUS_PATTERNS), (
+        f"'{command}' as '{user}' on '{unit}' failed for a non-authorization reason "
+        f"(broken probe, not a denial): {output.strip()}"
+    )
+    assert any(pattern in output for pattern in DENIAL_PATTERNS), (
+        f"'{command}' as '{user}' on '{unit}' failed without a recognizable "
+        f"denial message: {output.strip()}"
+    )
 
 
 class MailHandler:

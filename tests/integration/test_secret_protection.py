@@ -15,9 +15,7 @@
 
 """BDD step definitions for Slurm secret and credential protection tests.
 
-Currently skipped because the scenarios have not yet been verified against
-a live deployment. The shared unprivileged-user probe steps live in
-`conftest.py`.
+The shared unprivileged-user probe steps live in `conftest.py`.
 """
 
 import logging
@@ -29,29 +27,19 @@ from pytest_jubilant_bdd import Context
 
 logger = logging.getLogger(__name__)
 
-pytestmark = [
-    pytest.mark.order(8),
-    pytest.mark.skip(reason="security scenarios not yet verified against a live deployment"),
-]
+pytestmark = pytest.mark.order(8)
 
 scenarios("features/slurm_secret_and_credential_protection.feature")
 
 
-@then(parsers.parse("the file '{path}' on unit '{unit}' has mode '{mode}'"))
-def file_has_mode(context: Context, path: str, unit: str, mode: str) -> None:
-    """Assert a file on a unit has the expected octal permission mode."""
+@then(parsers.parse("the file '{path}' on unit '{unit}' has mode '{mode}' and owner '{user}'"))
+def file_has_mode_and_owner(context: Context, path: str, unit: str, mode: str, user: str) -> None:
+    """Assert a file on a unit has the expected octal permission mode and owning user."""
     juju = context.get_juju()
-    result = juju.exec(f"stat -c '%a' {shlex.quote(path)}", unit=unit)
+    result = juju.exec(f"stat -c '%a %U' {shlex.quote(path)}", unit=unit)
     assert result.success, f"cannot stat '{path}' on '{unit}': {result.stderr.strip()}"
-    actual = result.stdout.strip()
-    assert actual == mode, f"'{path}' on '{unit}' has mode '{actual}', expected '{mode}'"
-
-
-@then(parsers.parse("the file '{path}' on unit '{unit}' is owned by user '{user}'"))
-def file_is_owned_by_user(context: Context, path: str, unit: str, user: str) -> None:
-    """Assert a file on a unit is owned by the expected system user."""
-    juju = context.get_juju()
-    result = juju.exec(f"stat -c '%U' {shlex.quote(path)}", unit=unit)
-    assert result.success, f"cannot stat '{path}' on '{unit}': {result.stderr.strip()}"
-    actual = result.stdout.strip()
-    assert actual == user, f"'{path}' on '{unit}' is owned by '{actual}', expected '{user}'"
+    actual_mode, actual_user = result.stdout.strip().split()
+    assert (actual_mode, actual_user) == (mode, user), (
+        f"'{path}' on '{unit}' has mode '{actual_mode}' and owner '{actual_user}', "
+        f"expected mode '{mode}' and owner '{user}'"
+    )

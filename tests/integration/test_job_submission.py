@@ -1,4 +1,4 @@
-# Copyright 2024-2026 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ from collections.abc import Callable, Iterator
 
 import pytest
 from constants import SACKD_APP_NAME, SLURMCTLD_APP_NAME, SLURMD_APP_NAME
+from jubilant import TaskError
 from pytest_bdd import given, parsers, scenarios, then, when
 from pytest_jubilant_bdd import Context
 from utils import node_name
@@ -32,7 +33,53 @@ pytestmark = pytest.mark.order(12)
 scenarios("features/slurm_job_submission.feature")
 
 
-@pytest.fixture(scope="function")
+def delete_node_with_retry(context: Context, name: str, login_unit: str) -> None:
+    """Delete a node from slurmctld, retrying across slurmctld restart windows.
+
+    Charm hooks restart ``slurmctld`` asynchronously with respect to test
+    steps: config and relation changes rewrite ``slurm.conf`` and restart
+    the daemon, returning before it serves RPCs again. An ``scontrol`` RPC
+    landing in that window fails with ``Connection reset by peer``. The
+    delete is retried until the node is absent: a lost reply that followed
+    a processed delete leaves the node already gone, which satisfies the
+    goal state just as well.
+    """
+    juju = context.get_juju()
+    command = f"sudo scontrol delete nodename={name}"
+
+    def attempt() -> str | None:
+        """Issue the delete once; return the error output, or None if the node is gone."""
+        try:
+            juju.exec(command, unit=login_unit)
+        except TaskError as exc:
+            output = f"{exc.task.stdout}\n{exc.task.stderr}".lower()
+            # "Invalid node name specified" means an earlier attempt landed:
+            # the node is absent, which is the goal of this step.
+            if "invalid node" in output or "not found" in output:
+                return None
+            return output.strip()
+        except Exception as exc:
+            return str(exc)
+        return None
+
+    def node_absent(_ctx: Context) -> bool:
+        return attempt() is None
+
+    try:
+        # A healthy slurmctld answers within seconds; a bounded timeout keeps
+        # a wedged one from burning the session-wide wait budget here.
+        context.wait(ready=node_absent, successes=1, timeout=120)
+    except TimeoutError:
+        # One last attempt so the failure message carries the actual RPC
+        # error; if it returns None, the goal was met after all.
+        if error := attempt():
+            raise AssertionError(
+                f"'{command}' on '{login_unit}' never succeeded; slurmctld kept "
+                f"rejecting the RPC (last error: {error})"
+            ) from None
+
+
+@pytest.fixture
 def mock_gpu_cleanup() -> Iterator[list[Callable[[], None]]]:
     """Registry of teardown callables run after the scenario, in reverse order.
 
@@ -110,11 +157,10 @@ def setup_mock_gpu(
             juju.exec(command, unit=unit)
         juju.run(unit, "set-node-config", params={"reset": True})
         juju.config(SLURMCTLD_APP_NAME, reset="cgroup-parameters")
-        # Re-register the node last so it picks up the restored config.
-        juju.exec(
-            f"sudo scontrol delete nodename={node_name(unit)}",
-            unit=f"{SACKD_APP_NAME}/0",
-        )
+        # Re-register the node last so it picks up the restored config. The
+        # cgroup-parameters reset just restarted slurmctld, so the delete
+        # needs the same restart-window tolerance as the scenario step.
+        delete_node_with_retry(context, node_name(unit), f"{SACKD_APP_NAME}/0")
         juju.exec("sudo systemctl restart slurmd", unit=unit)
 
     mock_gpu_cleanup.append(teardown)
@@ -127,10 +173,12 @@ def setup_mock_gpu(
 )
 def reregister_slurmd_node(context: Context, name: str, login_unit: str) -> None:
     """Delete and restart the slurmd node so it re-registers with the cluster."""
-    juju = context.get_juju()
-    juju.exec(f"sudo scontrol delete nodename={name}", unit=login_unit)
+    # The preceding cgroup-parameters config set restarts slurmctld, so the
+    # delete must tolerate landing in the restart window.
+    delete_node_with_retry(context, name, login_unit)
     # Node names are `<app>-<id>` (e.g. 'compute-0' -> unit 'compute/0').
     app, unit_id = name.rsplit("-", maxsplit=1)
+    juju = context.get_juju()
     juju.exec("sudo systemctl restart slurmd", unit=f"{app}/{unit_id}")
 
 

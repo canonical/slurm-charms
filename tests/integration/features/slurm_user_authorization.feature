@@ -1,13 +1,19 @@
-@security @edge @planned
 Feature: Slurm user authorization
-  Unprivileged users may query the scheduler and mint JWT tokens for themselves but cannot administer the cluster, control its services, modify accounting, mint tokens for other users, or tamper with configuration and logs. Slurm CLI probes run on the login node, where sackd brokers credentials for unprivileged users; each denial is paired with a check that the protected resource is genuinely unchanged.
+  Unprivileged users may query the scheduler and mint JWT tokens for
+themselves but cannot administer the cluster, control its services,
+modify accounting, mint tokens for other users, or tamper with
+configuration and logs. Slurm CLI probes run on the login node, where
+sackd brokers credentials for unprivileged users; each denial is paired
+with a check that the protected resource is genuinely unchanged.
 
   Background:
     Given 'login' is deployed
     And 'controller' is deployed
     And 'compute' is deployed
     And 'database' is deployed
+    And 'rest-api' is deployed
 
+  @security @edge
   Scenario: Unprivileged user can query the scheduler
     Then the command 'sinfo' on unit 'login/0' as user 'nobody' succeeds
   Scenario: Unprivileged user cannot reconfigure slurm
@@ -33,3 +39,12 @@ Feature: Slurm user authorization
     Then the command 'scontrol token' on unit 'login/0' as user 'nobody' succeeds
   Scenario: Unprivileged user cannot mint jwt tokens for other users
     Then the command 'scontrol token username=root' on unit 'login/0' as user 'nobody' is denied
+  Scenario: Unprivileged user cannot cancel another user's job
+    Given a slurm job is submitted from unit 'login/0' as user 'ubuntu'
+    Then the submitted job cannot be cancelled by user 'nobody' from unit 'login/0'
+    And the submitted job is still running
+  Scenario: Unprivileged user cannot run a job as another user
+    Then the command 'sbatch --uid=0 --chdir=/tmp --wrap="id -un"' on unit 'login/0' as user 'nobody' is denied
+    And a job run from unit 'login/0' as user 'nobody' executes as that user
+  Scenario: Unauthenticated slurmrestd request is denied
+    Then an unauthenticated request to the slurmrestd API from unit 'rest-api/0' is rejected with status '401'
