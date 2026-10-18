@@ -60,10 +60,8 @@ DENIAL_PATTERNS = (
     "insufficient privilege",
     "authentication required",
     "authentication is required",
-    # `sbatch --uid=<user>` impersonation attempt. Message verified in
-    # SchedMD slurm_opt.c arg_set_uid() and unchanged across 24.11-25.11:
-    # the client rejects --uid for any caller whose uid is not 0 before
-    # contacting slurmctld.
+    # `sbatch --uid=<user>` denial; message verified in SchedMD slurm_opt.c
+    # arg_set_uid(), unchanged across 24.11-25.11.
     "only permitted by root",
 )
 
@@ -83,8 +81,8 @@ def exec_as_user(
 
     jubilant's ``exec`` raises ``TaskError`` when the command exits nonzero,
     but denial probes expect failure; the raised task is recovered so
-    callers can inspect its output and return code. ``wait`` bounds each
-    invocation, mirroring ``juju.exec``'s ``wait`` parameter.
+    callers can inspect its output and return code. ``wait`` is passed
+    through to ``juju.exec``.
     """
     juju = context.get_juju()
     try:

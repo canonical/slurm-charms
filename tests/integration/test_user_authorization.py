@@ -34,14 +34,11 @@ scenarios("features/slurm_user_authorization.feature")
 def submit_job_as_user(context: Context, unit: str, user: str) -> None:
     """Submit a sleeping batch job as an unprivileged user and record its job id.
 
-    Root cannot submit Slurm jobs, so the victim job in the cancel-denial
-    scenario must be owned by a regular user; `sbatch --wrap` keeps it
-    scriptless and long-running enough to probe against.
-
+    Root cannot submit Slurm jobs, so the victim job must be owned by a
+    regular user; `sbatch --wrap` keeps it scriptless and long-running.
     `--chdir` is required: `juju exec` runs with a root-owned working
-    directory, which sbatch records as the job's working directory. Without
-    an accessible directory the job dies at launch as the unprivileged user
-    and never reaches RUNNING, no matter how long the sleep is.
+    directory, and without an accessible one the job dies at launch as the
+    unprivileged user and never reaches RUNNING.
     """
     juju = context.get_juju()
     result = juju.exec(
@@ -109,11 +106,8 @@ def submitted_job_still_running(context: Context) -> None:
 def job_run_executes_as_user(context: Context, unit: str, user: str) -> None:
     """Assert an unprivileged user's srun job executes under their own identity.
 
-    Pairs with the ``--uid`` denial probes in the same scenario: Slurm must
-    deny impersonation attempts while still running self-owned jobs. Retries
-    because ``srun`` fails transiently while ``slurmctld`` restarts after
-    relation events, and a swallowed single-shot failure would present as
-    missing output rather than the underlying error.
+    Positive control for the ``--uid`` denial probe. Retried: ``srun``
+    fails transiently while ``slurmctld`` restarts after relation events.
     """
     command = f"srun --chdir=/tmp --partition {SLURMD_APP_NAME} id -un"
     last: Task | None = None

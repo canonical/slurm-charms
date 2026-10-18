@@ -187,7 +187,7 @@ scenarios:
 ---
 feature: "Slurm secret and credential protection"
 type: security
-status: planned
+status: implemented
 risk: edge
 description: |-
   Slurm secret files are owner-only with the correct per-charm service

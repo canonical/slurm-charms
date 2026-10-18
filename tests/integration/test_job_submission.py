@@ -36,13 +36,10 @@ scenarios("features/slurm_job_submission.feature")
 def delete_node_with_retry(context: Context, name: str, login_unit: str) -> None:
     """Delete a node from slurmctld, retrying across slurmctld restart windows.
 
-    Charm hooks restart ``slurmctld`` asynchronously with respect to test
-    steps: config and relation changes rewrite ``slurm.conf`` and restart
-    the daemon, returning before it serves RPCs again. An ``scontrol`` RPC
-    landing in that window fails with ``Connection reset by peer``. The
-    delete is retried until the node is absent: a lost reply that followed
-    a processed delete leaves the node already gone, which satisfies the
-    goal state just as well.
+    Charm hooks restart ``slurmctld`` on config and relation changes and
+    return before it serves RPCs again; an ``scontrol`` landing in that
+    window fails with ``Connection reset by peer``. Retried until the node
+    is absent, so a lost reply after a processed delete still succeeds.
     """
     juju = context.get_juju()
     command = f"sudo scontrol delete nodename={name}"
@@ -157,9 +154,7 @@ def setup_mock_gpu(
             juju.exec(command, unit=unit)
         juju.run(unit, "set-node-config", params={"reset": True})
         juju.config(SLURMCTLD_APP_NAME, reset="cgroup-parameters")
-        # Re-register the node last so it picks up the restored config. The
-        # cgroup-parameters reset just restarted slurmctld, so the delete
-        # needs the same restart-window tolerance as the scenario step.
+        # Re-register the node last so it picks up the restored config.
         delete_node_with_retry(context, node_name(unit), f"{SACKD_APP_NAME}/0")
         juju.exec("sudo systemctl restart slurmd", unit=unit)
 
@@ -173,8 +168,6 @@ def setup_mock_gpu(
 )
 def reregister_slurmd_node(context: Context, name: str, login_unit: str) -> None:
     """Delete and restart the slurmd node so it re-registers with the cluster."""
-    # The preceding cgroup-parameters config set restarts slurmctld, so the
-    # delete must tolerate landing in the restart window.
     delete_node_with_retry(context, name, login_unit)
     # Node names are `<app>-<id>` (e.g. 'compute-0' -> unit 'compute/0').
     app, unit_id = name.rsplit("-", maxsplit=1)
