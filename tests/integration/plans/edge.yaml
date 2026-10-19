@@ -117,9 +117,7 @@ description: |-
   Unprivileged users may query the scheduler and mint JWT tokens for
   themselves but cannot administer the cluster, control its services,
   modify accounting, mint tokens for other users, or tamper with
-  configuration and logs. Slurm CLI probes run on the login node, where
-  sackd brokers credentials for unprivileged users; each denial is paired
-  with a check that the protected resource is genuinely unchanged.
+  configuration and logs.
 background: |-
   Given 'login' is deployed
   And 'controller' is deployed
@@ -193,9 +191,7 @@ description: |-
   Slurm secret files are owner-only with the correct per-charm service
   owner and are unreadable by unprivileged users. The accounting database
   password stays confined to its 0600 file and must not leak into
-  slurm.conf, which is world-readable by design. Complements the key
-  rotation feature, which proves rotation works but never checks the
-  resulting files' modes or owners.
+  slurm.conf, which is world-readable by design.
 background: |-
   Given 'login' is deployed
   And 'controller' is deployed

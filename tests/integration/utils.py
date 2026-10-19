@@ -60,8 +60,6 @@ DENIAL_PATTERNS = (
     "insufficient privilege",
     "authentication required",
     "authentication is required",
-    # `sbatch --uid=<user>` denial; message verified in SchedMD slurm_opt.c
-    # arg_set_uid(), unchanged across 24.11-25.11.
     "only permitted by root",
 )
 

@@ -80,14 +80,9 @@ def submitted_job_still_running(context: Context) -> None:
         return result.success and "RUNNING" in result.stdout
 
     # A single RUNNING sighting proves the job survived the denied scancel.
-    # The default of 3 consecutive successes can outlast the job's short
-    # sleep window when each `juju.exec` round trip takes seconds.
     try:
         context.wait(ready=ready, successes=1)
     except TimeoutError:
-        # Surface why the job never ran (pending reason, launch failure,
-        # ...) instead of a bare TimeoutError. `scontrol` covers jobs still
-        # in the queue, `sacct` jobs that already left it.
         try:
             diagnostics = juju.exec(
                 f"scontrol show job {job_id} || "
