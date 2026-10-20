@@ -20,7 +20,7 @@ requires-python = "==3.14.*"
 [project.optional-dependencies]
 dev = [
     # repository.py
-    "rtoml ~= 0.13",
+    "rtoml ~= 0.14",
 
     # Development
     "charmed-hpc-libs[all] ~= 0.7.1",
