@@ -9,7 +9,8 @@ for the Juju Terraform provider.
 ## Requirements
 
 - Terraform >= 1.0
-- Juju Terraform provider >= 1.0.0, < 2.0.0
+- Juju Terraform provider >= 1.0.0, < 3.0.0
+- A Juju 3.x or later controller.
 - An existing Juju model
 
 ## API
