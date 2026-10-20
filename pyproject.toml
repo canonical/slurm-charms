@@ -38,7 +38,7 @@ dev = [
     "nvidia-ml-py == 12.560.30",
     "ops ~= 3.9.0",
     "psutil ~= 7.2",
-    "pydantic ~= 2.13",
+    "pydantic ~= 2.14",
     "slurm-ops",
     "slurmutils>=1.3.2,<2.0.0",
 
