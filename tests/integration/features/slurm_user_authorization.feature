@@ -23,12 +23,12 @@ configuration and logs.
     And the output of 'sinfo -h -o %T -n compute-0' on unit 'login/0' as user 'nobody' contains 'idle'
   Scenario: Unprivileged user cannot control Slurm services
     Then the command 'systemctl restart slurmctld' on unit 'controller/0' as user 'nobody' is denied
-    And the output of 'systemctl is-active slurmctld' on unit 'controller/0' as user 'nobody' contains 'active'
+    And the command 'systemctl is-active --quiet slurmctld' on unit 'controller/0' as user 'nobody' succeeds
     And the command 'systemctl stop slurmd' on unit 'compute/0' as user 'nobody' is denied
-    And the output of 'systemctl is-active slurmd' on unit 'compute/0' as user 'nobody' contains 'active'
+    And the command 'systemctl is-active --quiet slurmd' on unit 'compute/0' as user 'nobody' succeeds
   Scenario: Unprivileged user cannot tamper with Slurm configuration or logs
     Then the command 'echo tampered >> /etc/slurm/slurm.conf' on unit 'controller/0' as user 'nobody' is denied
-    And the output of 'grep -c tampered /etc/slurm/slurm.conf' on unit 'controller/0' as user 'nobody' contains '0'
+    And the command 'grep -c tampered /etc/slurm/slurm.conf | grep -x 0' on unit 'controller/0' as user 'nobody' succeeds
     And the command 'echo tampered >> /var/log/slurm/slurmctld.log' on unit 'controller/0' as user 'nobody' is denied
   Scenario: Unprivileged user cannot modify accounting
     Then the command 'sacctmgr -i delete account nonexistent-authz-test' on unit 'login/0' as user 'nobody' is denied
