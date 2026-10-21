@@ -98,14 +98,6 @@ def job_submission(context: Context, login_unit: str, compute_unit: str) -> None
             f"job '{job_name}' did not complete, states: {states}"
         )
 
-
-# ---------------------------------------------------------------------------
-# Unprivileged-user command probes (shared by the security features)
-# ---------------------------------------------------------------------------
-# Step registrations only -- the exec/assertion logic lives in utils.py so
-# step modules can reuse it without importing from conftest.
-
-
 @then(parsers.parse("the command '{command}' on unit '{unit}' as user '{user}' succeeds"))
 def command_as_user_succeeds(context: Context, command: str, unit: str, user: str) -> None:
     """Assert a command run as an unprivileged user exits successfully."""
@@ -131,11 +123,7 @@ def command_as_user_is_denied(context: Context, command: str, unit: str, user: s
 def output_as_user_contains(
     context: Context, command: str, unit: str, user: str, expected: str
 ) -> None:
-    """Assert the output of a command run as an unprivileged user contains text.
-
-    The exit code is deliberately not asserted: probes such as `grep -c`
-    legitimately exit nonzero while printing the expected output.
-    """
+    """Assert the output of a command run as an unprivileged user contains text."""
     result = exec_as_user(context, command, unit, user)
     output = f"{result.stdout}\n{result.stderr}"
     assert expected in output, (
@@ -153,11 +141,7 @@ def output_as_user_contains(
 def output_as_user_does_not_contain(
     context: Context, command: str, unit: str, user: str, unexpected: str
 ) -> None:
-    """Assert the output of a command run as an unprivileged user lacks text.
-
-    The command must succeed: an absent string in the output of a failed
-    command proves nothing.
-    """
+    """Assert the output of a command run as an unprivileged user lacks text."""
     result = exec_as_user(context, command, unit, user)
     assert result.success, (
         f"'{command}' as '{user}' on '{unit}' failed "
@@ -183,11 +167,6 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "high_availability: marks tests for slurmctld high availability"
     )
-    config.addinivalue_line("markers", "security: gherkinator test type classification")
-    config.addinivalue_line("markers", "functional: gherkinator test type classification")
-    config.addinivalue_line("markers", "reliability: gherkinator test type classification")
-    config.addinivalue_line("markers", "edge: gherkinator test risk classification")
-    config.addinivalue_line("markers", "planned: gherkinator test status classification")
 
 
 def pytest_collection_modifyitems(config, items):

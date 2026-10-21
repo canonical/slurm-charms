@@ -13,13 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""BDD step definitions for Slurm user authorization tests.
-
-The shared unprivileged-user probe steps live in `conftest.py`.
-"""
+"""BDD step definitions for Slurm user authorization tests."""
 
 import pytest
-from constants import SLURMD_APP_NAME, SLURMRESTD_APP_NAME
+from constants import SLURMD_APP_NAME
 from jubilant import Task, TaskError
 from pytest_bdd import given, parsers, scenarios, then
 from pytest_jubilant_bdd import Context
@@ -32,14 +29,7 @@ scenarios("features/slurm_user_authorization.feature")
 
 @given(parsers.parse("a slurm job is submitted from unit '{unit}' as user '{user}'"))
 def submit_job_as_user(context: Context, unit: str, user: str) -> None:
-    """Submit a sleeping batch job as an unprivileged user and record its job id.
-
-    Root cannot submit Slurm jobs, so the victim job must be owned by a
-    regular user; `sbatch --wrap` keeps it scriptless and long-running.
-    `--chdir` is required: `juju exec` runs with a root-owned working
-    directory, and without an accessible one the job dies at launch as the
-    unprivileged user and never reaches RUNNING.
-    """
+    """Submit a sleeping batch job as an unprivileged user and record its job id."""
     juju = context.get_juju()
     result = juju.exec(
         f"sudo -u {user} sbatch --chdir=/tmp --partition {SLURMD_APP_NAME} --wrap 'sleep 30'",
@@ -48,7 +38,6 @@ def submit_job_as_user(context: Context, unit: str, user: str) -> None:
     assert result.success, (
         f"failed to submit a job as '{user}' on '{unit}': {result.stderr.strip()}"
     )
-    # sbatch prints "Submitted batch job <id>" on success.
     prefix = "Submitted batch job"
     stdout = result.stdout.strip()
     assert prefix in stdout, f"unexpected sbatch output on '{unit}': {stdout}"
@@ -99,33 +88,40 @@ def submitted_job_still_running(context: Context) -> None:
 
 @then(parsers.parse("a job run from unit '{unit}' as user '{user}' executes as that user"))
 def job_run_executes_as_user(context: Context, unit: str, user: str) -> None:
-    """Assert an unprivileged user's srun job executes under their own identity.
-
-    Positive control for the ``--uid`` denial probe. Retried: ``srun``
-    fails transiently while ``slurmctld`` restarts after relation events.
-    """
+    """Assert an unprivileged user's srun job executes under their own identity."""
     command = f"srun --chdir=/tmp --partition {SLURMD_APP_NAME} id -un"
-    last: Task | None = None
 
-    def ready(_ctx: Context) -> bool:
-        nonlocal last
+    def attempt() -> Task | None:
+        """Run the job once; return the failed Task, or None if it ran as the user."""
+        result = exec_as_user(context, command, unit, user, wait=120)
+        if result.success and result.stdout.strip() == user:
+            return None
+        return result
+
+    def ran_as_user(_ctx: Context) -> bool:
         try:
-            last = exec_as_user(context, command, unit, user, wait=120)
+            return attempt() is None
         except Exception:
             return False
-        return last.success and last.stdout.strip() == user
 
     try:
-        context.wait(ready=ready, successes=1)
+        context.wait(ready=ran_as_user, successes=1)
     except TimeoutError:
-        if last is None:
+        # One last attempt so the failure message carries the actual result;
+        # if it returns None, the job ran as the user after all.
+        try:
+            failed = attempt()
+        except Exception as exc:
             raise AssertionError(
-                f"'{command}' as '{user}' on '{unit}' never completed: every attempt raised"
+                f"'{command}' as '{user}' on '{unit}' never completed "
+                f"(last attempt raised: {exc})"
             ) from None
+        if failed is None:
+            return
         raise AssertionError(
             f"'{command}' as '{user}' on '{unit}' never ran as that user "
-            f"(return_code={last.return_code}): "
-            f"stdout={last.stdout.strip()!r} stderr={last.stderr.strip()!r}"
+            f"(return_code={failed.return_code}): "
+            f"stdout={failed.stdout.strip()!r} stderr={failed.stderr.strip()!r}"
         ) from None
 
 
@@ -136,15 +132,9 @@ def job_run_executes_as_user(context: Context, unit: str, user: str) -> None:
     )
 )
 def unauthenticated_api_request_rejected(context: Context, unit: str, code: str) -> None:
-    """Assert the Slurm REST API rejects requests that lack a JWT token.
-
-    Mirrors the authenticated probe in `test_key_rotation.py` but omits
-    the `X-SLURM-USER-TOKEN` header; the unversioned `/openapi` path
-    requires no version prefix and is auth-gated like every other
-    endpoint.
-    """
+    """Assert the Slurm REST API rejects requests that lack a JWT token."""
     juju = context.get_juju()
-    address = juju.status().apps[SLURMRESTD_APP_NAME].units[unit].public_address
+    address = context.get_unit(unit).public_address
     url = f"http://{address}:6820/openapi"
     result = juju.exec(
         f"curl --silent --show-error"

@@ -2,9 +2,7 @@ Feature: Slurm user authorization
   Unprivileged users may query the scheduler and mint JWT tokens for
 themselves but cannot administer the cluster, control its services,
 modify accounting, mint tokens for other users, or tamper with
-configuration and logs. Slurm CLI probes run on the login node, where
-sackd brokers credentials for unprivileged users; each denial is paired
-with a check that the protected resource is genuinely unchanged.
+configuration and logs.
 
   Background:
     Given 'login' is deployed

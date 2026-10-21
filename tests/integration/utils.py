@@ -42,7 +42,6 @@ def node_name(unit: str) -> str:
     return unit.replace("/", "-")
 
 
-# Output fragments that indicate an authorization denial.
 DENIAL_PATTERNS = (
     "permission denied",
     "access denied",
@@ -62,45 +61,33 @@ DENIAL_PATTERNS = (
     "authentication is required",
     "only permitted by root",
 )
+"""Output fragments that indicate an authorization denial."""
 
-# Output fragments that indicate the probe itself is broken (missing binary
-# or file) rather than denied. A denial scenario must never pass on these.
-VACUOUS_PATTERNS = (
+IGNORE_PATTERNS = (
     "command not found",
     "no such file or directory",
     "usage:",
 )
-
+"""Output fragments that indicate the probe itself is broken rather than denied."""
 
 def exec_as_user(
     context: Context, command: str, unit: str, user: str, wait: int | None = None
 ) -> Task:
-    """Execute a command on a unit as an unprivileged user via sudo.
-
-    jubilant's ``exec`` raises ``TaskError`` when the command exits nonzero,
-    but denial probes expect failure; the raised task is recovered so
-    callers can inspect its output and return code. ``wait`` is passed
-    through to ``juju.exec``.
-    """
+    """Execute a command on a unit as an unprivileged user via sudo."""
     juju = context.get_juju()
     try:
         return juju.exec(f"sudo -u {user} sh -c {shlex.quote(command)}", unit=unit, wait=wait)
-    except TaskError as exc:
-        return exc.task
+    except TaskError as e:
+        return e.task
 
 
 def assert_command_denied(result: Task, command: str, unit: str, user: str) -> None:
-    """Assert a task run as an unprivileged user was denied on authorization grounds.
-
-    A nonzero exit alone proves nothing: a missing binary or absent file
-    also exits nonzero. Require a recognizable denial message and reject
-    the known vacuous failures, failing loudly with the observed output.
-    """
+    """Assert a task run as an unprivileged user was denied on authorization grounds."""
     output = f"{result.stdout}\n{result.stderr}".lower()
     assert not result.success, (
         f"'{command}' as '{user}' on '{unit}' succeeded, expected denial: {result.stdout.strip()}"
     )
-    assert not any(pattern in output for pattern in VACUOUS_PATTERNS), (
+    assert not any(pattern in output for pattern in IGNORE_PATTERNS), (
         f"'{command}' as '{user}' on '{unit}' failed for a non-authorization reason "
         f"(broken probe, not a denial): {output.strip()}"
     )

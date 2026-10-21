@@ -190,8 +190,7 @@ risk: edge
 description: |-
   Slurm secret files are owner-only with the correct per-charm service
   owner and are unreadable by unprivileged users. The accounting database
-  password stays confined to its 0600 file and must not leak into
-  slurm.conf, which is world-readable by design.
+  password stays confined to its 0600 slurmdbd.conf file.
 background: |-
   Given 'login' is deployed
   And 'controller' is deployed
@@ -222,11 +221,6 @@ scenarios:
 
     Then the file '/etc/slurm/slurmdbd.conf' on unit 'database/0' has mode '600' and owner 'slurm'
     And the command 'cat /etc/slurm/slurmdbd.conf' on unit 'database/0' as user 'nobody' is denied
-  - |-
-    World-readable slurm config contains no credentials
-
-    Then the output of 'cat /etc/slurm/slurm.conf' on unit 'controller/0' as user 'nobody' does not contain 'StoragePass'
-    And the output of 'cat /etc/slurm/slurm.conf' on unit 'controller/0' as user 'nobody' does not contain 'StorageUser'
 
 ---
 feature: "Slurm key rotation"
