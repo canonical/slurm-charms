@@ -13,10 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""BDD step definitions for Slurm secret and credential protection tests.
-
-The shared unprivileged-user probe steps live in `conftest.py`.
-"""
+"""BDD step definitions for Slurm secret and credential protection tests."""
 
 import logging
 import shlex
