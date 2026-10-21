@@ -12,7 +12,7 @@ their expected ports.
 
   @functional @edge
   Scenario: Slurm services are active within all units
-    Then the slurm systemd service is active on all slurm units
+    Then the Slurm systemd service is active on all Slurm units
   Scenario: Slurm metrics endpoint is accessible
     Then the slurmctld metrics endpoint on unit 'controller/0' returns http status '200'
   Scenario: Slurmctld is listening on port 6817

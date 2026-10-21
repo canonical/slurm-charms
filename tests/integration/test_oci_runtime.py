@@ -31,9 +31,9 @@ scenarios("features/slurm_oci_runtime.feature")
 
 
 @then(
-    parsers.parse(
-        "a slurm apptainer container job submitted from unit '{login_unit}' "
-        "runs on unit '{compute_unit}'"
+    parsers.re(
+        r"a (?i:slurm) apptainer container job submitted from unit '(?P<login_unit>[^']+)' "
+        r"runs on unit '(?P<compute_unit>[^']+)'"
     )
 )
 def apptainer_oci_scheduling(context: Context, login_unit: str, compute_unit: str) -> None:

@@ -27,7 +27,12 @@ pytestmark = pytest.mark.order(7)
 scenarios("features/slurm_user_authorization.feature")
 
 
-@given(parsers.parse("a slurm job is submitted from unit '{unit}' as user '{user}'"))
+@given(
+    parsers.re(
+        r"a (?i:slurm) job is submitted from unit '(?P<unit>[^']+)' "
+        r"as user '(?P<user>[^']+)'"
+    )
+)
 def submit_job_as_user(context: Context, unit: str, user: str) -> None:
     """Submit a sleeping batch job as an unprivileged user and record its job id."""
     juju = context.get_juju()

@@ -43,8 +43,9 @@ def smtp_handler() -> Iterator[MailHandler]:
 
 
 @then(
-    parsers.parse(
-        "a slurm srun job submitted from unit '{login_unit}' runs on unit '{compute_unit}'"
+    parsers.re(
+        r"a (?i:slurm) srun job submitted from unit '(?P<login_unit>[^']+)' "
+        r"runs on unit '(?P<compute_unit>[^']+)'"
     )
 )
 def job_submission(context: Context, login_unit: str, compute_unit: str) -> None:

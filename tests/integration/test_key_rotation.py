@@ -51,7 +51,7 @@ def run_action_extended_timeout(context: Context, action: str, unit: str) -> Non
     context.action_results.push(result)
 
 
-@given(parsers.parse("I capture the slurm auth JWKS key from unit '{unit}'"))
+@given(parsers.re(r"I capture the (?i:slurm) auth JWKS key from unit '(?P<unit>[^']+)'"))
 def capture_auth_key(context: Context, unit: str) -> None:
     """Read ``/etc/slurm/slurm.jwks`` and store it in scenario state."""
     juju = context.get_juju()
@@ -60,8 +60,9 @@ def capture_auth_key(context: Context, unit: str) -> None:
 
 
 @then(
-    parsers.parse(
-        "the slurm auth JWKS key on unit '{unit}' is rotated and propagated to all units"
+    parsers.re(
+        r"the (?i:slurm) auth JWKS key on unit '(?P<unit>[^']+)' "
+        r"is rotated and propagated to all units"
     )
 )
 def auth_key_rotated(context: Context, unit: str) -> None:
@@ -97,7 +98,7 @@ def auth_key_rotated(context: Context, unit: str) -> None:
     context.wait(ready=ready)
 
 
-@given(parsers.parse("I capture the slurm JWT signing key from unit '{unit}'"))
+@given(parsers.re(r"I capture the (?i:slurm) JWT signing key from unit '(?P<unit>[^']+)'"))
 def capture_jwt_key(context: Context, unit: str) -> None:
     """Read ``/etc/slurm/jwt_hs256.key`` and store it in scenario state."""
     juju = context.get_juju()
@@ -106,7 +107,10 @@ def capture_jwt_key(context: Context, unit: str) -> None:
 
 
 @given(
-    parsers.parse("the initial slurm JWT signing keys match between '{unit_one}' and '{unit_two}'")
+    parsers.re(
+        r"the initial (?i:slurm) JWT signing keys match between "
+        r"'(?P<unit_one>[^']+)' and '(?P<unit_two>[^']+)'"
+    )
 )
 def jwt_keys_match(context: Context, unit_one: str, unit_two: str) -> None:
     """Assert the initial JWT keys on two units are identical."""
@@ -114,7 +118,7 @@ def jwt_keys_match(context: Context, unit_one: str, unit_two: str) -> None:
     assert keys[unit_one] == keys[unit_two], f"initial JWT key on {unit_one} and {unit_two} differ"
 
 
-@given(parsers.parse("I capture an initial slurm JWT token from unit '{unit}'"))
+@given(parsers.re(r"I capture an initial (?i:slurm) JWT token from unit '(?P<unit>[^']+)'"))
 def capture_initial_token(context: Context, unit: str) -> None:
     """Generate a Slurm JWT token and store it in scenario state."""
     juju = context.get_juju()
@@ -157,8 +161,9 @@ def discover_diag_endpoints(context: Context, unit: str) -> None:
 
 
 @then(
-    parsers.parse(
-        "the slurm JWT signing key on unit '{unit}' is rotated and matches unit '{unit_two}'"
+    parsers.re(
+        r"the (?i:slurm) JWT signing key on unit '(?P<unit>[^']+)' "
+        r"is rotated and matches unit '(?P<unit_two>[^']+)'"
     )
 )
 def jwt_key_rotated(context: Context, unit: str, unit_two: str) -> None:
@@ -182,7 +187,9 @@ def jwt_key_rotated(context: Context, unit: str, unit_two: str) -> None:
     context.wait(ready=ready)
 
 
-@then(parsers.parse("the initial slurm JWT token from unit '{unit}' is no longer valid"))
+@then(
+    parsers.re(r"the initial (?i:slurm) JWT token from unit '(?P<unit>[^']+)' is no longer valid")
+)
 def initial_token_invalid(context: Context, unit: str) -> None:
     """Verify the old token is rejected after key rotation."""
     juju = context.get_juju()
@@ -193,8 +200,9 @@ def initial_token_invalid(context: Context, unit: str) -> None:
 
 
 @then(
-    parsers.parse(
-        "a new slurm JWT token from unit '{unit}' is valid for all slurmrestd diagnostic endpoints"
+    parsers.re(
+        r"a new (?i:slurm) JWT token from unit '(?P<unit>[^']+)' "
+        r"is valid for all slurmrestd diagnostic endpoints"
     )
 )
 def new_token_valid(context: Context, unit: str) -> None:

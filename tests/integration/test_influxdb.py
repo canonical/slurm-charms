@@ -34,7 +34,10 @@ scenarios("features/slurm_influxdb_accounting.feature")
 
 
 @then(
-    parsers.parse("a slurm sstat task accounting job on unit '{unit}' reports '{expected}' task")
+    parsers.re(
+        r"a (?i:slurm) sstat task accounting job on unit '(?P<unit>[^']+)' "
+        r"reports '(?P<expected>[^']+)' task"
+    )
 )
 def task_accounting(context: Context, unit: str, expected: str) -> None:
     """Submit a sleep job via sbatch and verify sstat reports the task count."""

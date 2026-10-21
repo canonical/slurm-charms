@@ -4,7 +4,7 @@ slurmrestd, mysql) and integrate all applications. Shared session state
 relied on by every subsequent feature.
 
   @functional @edge
-  Scenario: Deploy the slurm cluster
+  Scenario: Deploy the Slurm cluster
     Given I add model 'slurm'
     And I switch to model 'slurm'
     And I set 'update-status-hook-interval' for model 'slurm' to '10s'

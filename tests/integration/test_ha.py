@@ -283,7 +283,7 @@ def control_slurmctld_service(context: Context, operation: str, mode: str) -> No
     )
 
 
-@then(parsers.parse("the slurm sinfo command succeeds on unit '{unit}'"))
+@then(parsers.re(r"the (?i:slurm) sinfo command succeeds on unit '(?P<unit>[^']+)'"))
 def sinfo_succeeds(context: Context, unit: str) -> None:
     """Poll until ``sinfo`` returns successfully on the given unit."""
     juju = context.get_juju()

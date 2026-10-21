@@ -11,7 +11,7 @@ password stays confined to its 0600 slurmdbd.conf file.
     And 'rest-api' is deployed
 
   @security @edge
-  Scenario: Auth key file is owner-only with the correct owner on every slurm unit
+  Scenario: Auth key file is owner-only with the correct owner on every Slurm unit
     Then the file '/etc/slurm/slurm.jwks' on unit 'login/0' has mode '600' and owner 'slurm'
     And the file '/etc/slurm/slurm.jwks' on unit 'controller/0' has mode '600' and owner 'slurm'
     And the file '/etc/slurm/slurm.jwks' on unit 'database/0' has mode '600' and owner 'slurm'
@@ -20,7 +20,7 @@ password stays confined to its 0600 slurmdbd.conf file.
   Scenario: JWT signing key file is owner-only where it exists
     Then the file '/etc/slurm/jwt_hs256.key' on unit 'controller/0' has mode '600' and owner 'slurm'
     And the file '/etc/slurm/jwt_hs256.key' on unit 'database/0' has mode '600' and owner 'slurm'
-  Scenario: Unprivileged user cannot read slurm key material
+  Scenario: Unprivileged user cannot read Slurm key material
     Then the command 'cat /etc/slurm/slurm.jwks' on unit 'controller/0' as user 'nobody' is denied
     And the command 'cat /etc/slurm/jwt_hs256.key' on unit 'controller/0' as user 'nobody' is denied
   Scenario: Database password file is owner-only and unreadable by unprivileged users

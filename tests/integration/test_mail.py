@@ -50,9 +50,9 @@ def deploy_smtp_integrator(context: Context, smtp_handler: MailHandler, port: st
 
 
 @when(
-    parsers.parse(
-        "I run a slurm srun job on unit '{unit}' with mail user '{to_address}' "
-        "and mail type '{mail_type}'"
+    parsers.re(
+        r"I run a (?i:slurm) srun job on unit '(?P<unit>[^']+)' "
+        r"with mail user '(?P<to_address>[^']+)' and mail type '(?P<mail_type>[^']+)'"
     )
 )
 def run_slurm_job_mail(context: Context, unit: str, to_address: str, mail_type: str) -> None:
@@ -90,9 +90,9 @@ def run_slurm_job_mail(context: Context, unit: str, to_address: str, mail_type: 
 
 
 @when(
-    parsers.parse(
-        "I run a failing slurm srun job on unit '{unit}' with mail user '{to_address}' "
-        "and mail type '{mail_type}'"
+    parsers.re(
+        r"I run a failing (?i:slurm) srun job on unit '(?P<unit>[^']+)' "
+        r"with mail user '(?P<to_address>[^']+)' and mail type '(?P<mail_type>[^']+)'"
     )
 )
 def run_failing_slurm_job_mail(

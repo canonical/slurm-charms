@@ -12,4 +12,4 @@ Feature: Slurm OCI runtime
     And I integrate 'apptainer' with 'controller'
     And I integrate 'apptainer' with 'compute'
     Then the workload status for app 'apptainer' is 'active'
-    And a slurm apptainer container job submitted from unit 'login/0' runs on unit 'compute/0'
+    And a Slurm apptainer container job submitted from unit 'login/0' runs on unit 'compute/0'

@@ -28,7 +28,7 @@ pytestmark = pytest.mark.order(2)
 scenarios("features/slurm_services_health.feature")
 
 
-@then("the slurm systemd service is active on all slurm units")
+@then(parsers.re(r"the (?i:slurm) systemd service is active on all (?i:slurm) units"))
 def slurm_services_active(context: Context) -> None:
     """Verify ``systemctl is-active`` returns ``active`` for every Slurm service."""
     juju = context.get_juju()

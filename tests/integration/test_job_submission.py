@@ -162,8 +162,9 @@ def setup_mock_gpu(
 
 
 @when(
-    parsers.parse(
-        "I re-register the slurmd node '{name}' with the slurm controller on unit '{login_unit}'"
+    parsers.re(
+        r"I re-register the slurmd node '(?P<name>[^']+)' "
+        r"with the (?i:slurm) controller on unit '(?P<login_unit>[^']+)'"
     )
 )
 def reregister_slurmd_node(context: Context, name: str, login_unit: str) -> None:
@@ -176,8 +177,9 @@ def reregister_slurmd_node(context: Context, name: str, login_unit: str) -> None
 
 
 @then(
-    parsers.parse(
-        "a slurm srun GPU job requesting 1 GPU submitted from unit '{login_unit}' runs on unit '{compute_unit}'"
+    parsers.re(
+        r"a (?i:slurm) srun GPU job requesting 1 GPU "
+        r"submitted from unit '(?P<login_unit>[^']+)' runs on unit '(?P<compute_unit>[^']+)'"
     )
 )
 def gpu_job_submission(context: Context, login_unit: str, compute_unit: str) -> None:

@@ -12,4 +12,4 @@ deployment is broken.
     Given I deploy 'influxdb'
     And I integrate 'influxdb' with 'controller'
     Then the workload status for app 'influxdb' is 'active'
-    And a slurm sstat task accounting job on unit 'login/0' reports '1' task
+    And a Slurm sstat task accounting job on unit 'login/0' reports '1' task

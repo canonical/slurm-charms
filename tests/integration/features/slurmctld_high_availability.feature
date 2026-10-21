@@ -50,14 +50,14 @@ a failed controller. Gated by the high_availability marker
     And the slurmctld controller that is primary reports ping status 'UP'
     And the slurmctld controller that is backup reports ping status 'UP'
     When I stop the slurmctld service on the controller that is primary
-    Then the slurm sinfo command succeeds on unit 'login/0'
+    Then the Slurm sinfo command succeeds on unit 'login/0'
     And the slurmctld service on the controller that is backup is running as primary
   Scenario: Service recovery after restarting primary
     Given I record the current slurmctld controller mode assignments
     And the slurmctld controller that is primary reports ping status 'DOWN'
     And the slurmctld controller that is backup reports ping status 'UP'
     When I restart the slurmctld service on the controller that is primary
-    Then the slurm sinfo command succeeds on unit 'login/0'
+    Then the Slurm sinfo command succeeds on unit 'login/0'
     And the slurmctld service on the controller that is primary is running as primary
     And the slurmctld service on the controller that is backup is running in background mode
   Scenario: Unit failover after powering off primary machine
@@ -68,8 +68,8 @@ a failed controller. Gated by the high_availability marker
     When I power off the primary slurmctld machine
     Then the primary slurmctld machine is powered off
     And the slurmctld service on the controller that is backup is running as primary
-    And the slurm sinfo command succeeds on unit 'login/0'
-    And a slurm srun job submitted from unit 'login/0' runs on unit 'compute/0'
+    And the Slurm sinfo command succeeds on unit 'login/0'
+    And a Slurm srun job submitted from unit 'login/0' runs on unit 'compute/0'
   Scenario: Unit recovery after rebooting primary machine
     Given I record the current slurmctld controller mode assignments
     And the slurmctld controller that is primary reports ping status 'DOWN'
@@ -77,7 +77,7 @@ a failed controller. Gated by the high_availability marker
     And the primary slurmctld machine is powered off
     When I reboot the primary slurmctld machine
     Then the workload status for app 'controller' is 'active'
-    And the slurm sinfo command succeeds on unit 'login/0'
+    And the Slurm sinfo command succeeds on unit 'login/0'
     And the slurmctld service on the controller that is primary is running as primary
     And the slurmctld service on the controller that is backup is running in background mode
   Scenario: Scale up slurmctld while primary is failed
