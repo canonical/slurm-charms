@@ -88,4 +88,4 @@ jobs:
           if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.enable_ha }}" == "true" ]]; then
             ARGS+=("--run-high-availability")
           fi
-          just integration -- --juju-bdd-wait-timeout=1200 ${ARGS[*]}
+          just integration -- --juju-bdd-wait-timeout=2400 --log-cli-level=DEBUG ${ARGS[*]}
