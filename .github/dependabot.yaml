@@ -3,7 +3,8 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: daily
+      interval: weekly
+      day: sunday
     groups:
       ci-dependencies:
         applies-to: version-updates
@@ -16,7 +17,8 @@ updates:
   - package-ecosystem: pip
     directory: /
     schedule:
-      interval: daily
+      interval: weekly
+      day: sunday
     groups:
       python-dependencies:
         applies-to: version-updates
