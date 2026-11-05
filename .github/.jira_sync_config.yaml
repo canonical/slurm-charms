@@ -1,0 +1,52 @@
+# Jira sync config for Chamed HPC.
+# Copy this file to .github/.jira_sync_config.yaml in each repository,
+# Full schema: https://github.com/canonical/gh-jira-sync-bot
+
+settings:
+  # Jira project key all GitHub issues are created in
+  jira_project_key: "HPCENG"
+
+  # GitHub issue state -> Jira status.
+  # These must match the status names in your Jira project's workflow.
+  status_mapping:
+    opened: "Triaged"
+    closed: "Done"
+    blocked: "BLOCKED"
+    # Used when a GitHub issue is closed as "not planned"
+    not_planned: "Rejected"
+
+  # Prefix the Jira summary with the source repo, since many repos
+  # feed into one Jira project. Renders as: "[slurm-charms] Issue title"
+  summary: "[{issue.repository.name}] {issue.title}"
+
+  # GitHub label -> Jira issue type. Issues with no matching label
+  # are created as Bugs.
+  label_mapping:
+    "feature request": "Story"
+    bug: "Task"
+
+  # Add a comment on the GitHub issue linking to the created Jira ticket
+  add_gh_comment: true
+
+  # Add a 'synced-to-jira' label to the GitHub issue once synced
+  add_gh_synced_label: true
+
+  # Sync issue body and comments from GitHub to Jira
+  sync_description: true
+  sync_comments: true
+
+  # Do not overwrite Jira labels with GitHub labels
+  sync_labels: false
+
+  # Uncomment to only sync issues carrying one of these labels:
+  labels:
+     - "bug"
+     - "feature request"
+
+  # Uncomment to attach Jira components (names are case-sensitive):
+  # components:
+  #   - Slurm
+
+  # Uncomment to link all created issues to a parent epic:
+  # epic_key: "HPC-1033"
+
