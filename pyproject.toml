@@ -55,7 +55,7 @@ dev = [
     "aiosmtpd == 1.4.6",
     "jubilant ~= 1.14",
     "pytest ~= 9.1",
-    "pytest-jubilant-bdd ~= 0.18",
+    "pytest-jubilant-bdd ~= 0.19",
     "pytest-order ~= 1.5",
 
     # Linting
