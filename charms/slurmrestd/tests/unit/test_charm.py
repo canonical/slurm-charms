@@ -113,12 +113,7 @@ class TestSlurmrestdCharm:
     """Unit tests for the `slurmrestd` charmed operator."""
 
     def test_on_install_success(self, mock_charm, mocker: MockerFixture, leader) -> None:
-        """Test the `_on_install` event handler.
-
-        Failure mode: `apt` enables `slurmrestd` on install. If the charm fails to
-        stop and disable the service, it starts serving the REST API before any
-        configuration or auth key exists.
-        """
+        """Test `_on_install` stops and disables `slurmrestd` and leaves the unit waiting for `slurmctld`."""
         with mock_charm(mock_charm.on.install(), testing.State(leader=leader)) as manager:
             slurmrestd = manager.charm.slurmrestd
             mocker.patch.object(slurmrestd, "install")
@@ -138,11 +133,7 @@ class TestSlurmrestdCharm:
         assert state.unit_status == ops.BlockedStatus("Waiting for integrations: [`slurmctld`]")
 
     def test_on_install_failure(self, mock_charm, mocker: MockerFixture, leader) -> None:
-        """Test the `_on_install` event handler when installing `slurmrestd` fails.
-
-        Failure mode: if an install failure is not deferred, the unit never retries
-        once `apt` recovers.
-        """
+        """Test `_on_install` defers and leaves the unit blocked when installing `slurmrestd` fails."""
         with mock_charm(mock_charm.on.install(), testing.State(leader=leader)) as manager:
             slurmrestd = manager.charm.slurmrestd
             mocker.patch.object(slurmrestd, "install", side_effect=SlurmOpsError("install failed"))
@@ -163,13 +154,7 @@ class TestSlurmrestdCharm:
     def test_on_slurmctld_ready(
         self, mock_charm, mocker: MockerFixture, leader, auth_key_secret
     ) -> None:
-        """Test the `_on_slurmctld_ready` event handler.
-
-        Failure mode: `slurmrestd` authenticates REST API clients with the auth key
-        and `slurm.conf` contents published by `slurmctld`. If the key or config
-        files are not written before the service is (re)started, the API rejects
-        every request.
-        """
+        """Test `_on_slurmctld_ready` writes the published auth key and configs, enables and restarts `slurmrestd`, and activates the unit."""
         integration = slurmctld_integration(auth_key_secret)
 
         with mock_charm(
@@ -202,12 +187,7 @@ class TestSlurmrestdCharm:
     def test_on_slurmctld_ready_deferred(
         self, mock_charm, mocker: MockerFixture, leader, auth_key_secret
     ) -> None:
-        """Test `_on_slurmctld_ready` when `slurmctld` has not published all required data.
-
-        Failure mode: if the `@wait_unless(controller_ready)` guard did not defer,
-        the handler would write an incomplete key or config and start `slurmrestd`
-        with a broken setup.
-        """
+        """Test `_on_slurmctld_ready` defers and waits when `slurmctld` has not published all required data."""
         integration = slurmctld_integration(auth_key_secret, ready=False)
 
         with mock_charm(
@@ -231,13 +211,7 @@ class TestSlurmrestdCharm:
     def test_on_slurmctld_ready_converges_repeated_events(
         self, mock_charm, mocker: MockerFixture, leader, auth_key_secret
     ) -> None:
-        """Test that repeated `_on_slurmctld_ready` events converge to a singular state.
-
-        Failure mode: `relation-changed` fires many times in production. If the
-        handler appended to the auth key file or config files instead of replacing
-        their contents, duplicate keys and config lines would accumulate and break
-        `slurmrestd` over time.
-        """
+        """Test repeated `_on_slurmctld_ready` events converge: the auth key and config files hold exactly one copy of the published data after each run."""
         integration = slurmctld_integration(auth_key_secret)
         input_state = testing.State(
             leader=leader, relations={integration}, secrets={auth_key_secret}
@@ -268,13 +242,7 @@ class TestSlurmrestdCharm:
     def test_on_slurmctld_ready_restart_failure(
         self, mock_charm, mocker: MockerFixture, leader, auth_key_secret
     ) -> None:
-        """Test `_on_slurmctld_ready` when restarting the `slurmrestd` service fails.
-
-        Failure mode: `service.restart()` raises `SystemdError`, which is a sibling of
-        `SlurmOpsError` rather than a subclass. If the handler stops catching it, the
-        exception escapes, the unit lands in Juju `error` status instead of blocked,
-        and the event is lost rather than deferred for retry.
-        """
+        """Test `_on_slurmctld_ready` writes the auth key and config, then defers and blocks when the `slurmrestd` restart fails."""
         integration = slurmctld_integration(auth_key_secret)
 
         with mock_charm(
@@ -303,12 +271,7 @@ class TestSlurmrestdCharm:
     def test_on_slurmctld_disconnected(
         self, mock_charm, mocker: MockerFixture, leader, auth_key_secret
     ) -> None:
-        """Test the `_on_slurmctld_disconnected` event handler.
-
-        Failure mode: when the `slurmctld` integration is removed, a still-running
-        `slurmrestd` keeps serving an API backed by a controller that no longer
-        recognizes its auth key. The service must be disabled and stopped.
-        """
+        """Test `_on_slurmctld_disconnected` disables and stops `slurmrestd` and leaves the unit waiting for `slurmctld`."""
         integration = slurmctld_integration(auth_key_secret)
 
         with mock_charm(
@@ -330,13 +293,7 @@ class TestSlurmrestdCharm:
     def test_on_slurmctld_disconnected_stop_failure(
         self, mock_charm, mocker: MockerFixture, leader, auth_key_secret
     ) -> None:
-        """Test `_on_slurmctld_disconnected` when stopping the `slurmrestd` service fails.
-
-        Failure mode: `service.stop()` raises `SystemdError`, which is a sibling of
-        `SlurmOpsError` rather than a subclass. If the handler stops catching it, the
-        exception escapes, the unit lands in Juju `error` status instead of blocked,
-        and the event is lost rather than deferred for retry.
-        """
+        """Test `_on_slurmctld_disconnected` defers and blocks when stopping `slurmrestd` fails."""
         integration = slurmctld_integration(auth_key_secret)
 
         with mock_charm(
@@ -358,18 +315,7 @@ class TestSlurmrestdCharm:
         )
 
     def test_on_secret_changed_success(self, mock_charm, mocker: MockerFixture, leader) -> None:
-        """Test successful execution of the `_on_secret_changed` event handler.
-
-        Failure mode: when `slurmctld` rotates the auth key it adds a new secret
-        revision, so the handler must read the *latest* revision
-        (`get_content(refresh=True)`). Reading the stale tracked revision would
-        leave `slurmrestd` authenticating with the old key while the rest of the
-        cluster has moved on, rejecting every REST API request.
-
-        The key file must also be *replaced*, not appended to (`key.set`, not
-        `key.apply`), and the service restarted rather than reloaded: unlike other
-        Slurm services, `slurmrestd` shuts down when sent the reload signal.
-        """
+        """Test `_on_secret_changed` replaces the key file with the latest secret revision and restarts `slurmrestd`, keeping the unit active."""
         key_file_path = Path("/etc/slurm/slurm.jwks")
         # A rotated secret: the charm still tracks the old revision, and the new
         # key is only visible on the latest revision.
@@ -403,12 +349,7 @@ class TestSlurmrestdCharm:
     def test_on_secret_changed_empty_key_id_failure(
         self, mock_charm, mocker: MockerFixture, leader
     ) -> None:
-        """Test `_on_secret_changed` event handler when auth key ID is empty.
-
-        Failure mode: an empty key ID means the rotated secret is unusable. The
-        handler must block and defer rather than write a malformed key file that
-        would break authentication for every REST API client.
-        """
+        """Test `_on_secret_changed` blocks and defers without writing the key file when the rotated auth key ID is empty."""
         auth_key_secret = testing.Secret(
             label=AUTH_KEY_LABEL, tracked_content={"key": EXAMPLE_AUTH_KEY, "keyid": ""}
         )
@@ -435,13 +376,7 @@ class TestSlurmrestdCharm:
     def test_on_secret_changed_ignores_unrelated_secret(
         self, mock_charm, mocker: MockerFixture, leader, auth_key_secret
     ) -> None:
-        """Test that `_on_secret_changed` ignores secrets that are not the auth key.
-
-        Failure mode: if the label guard were removed, any other secret observed
-        by this unit would overwrite `/etc/slurm/slurm.jwks` with foreign content
-        and needlessly restart the service, breaking authentication for every
-        REST API client.
-        """
+        """Test `_on_secret_changed` leaves the key file and service untouched for secrets that are not the auth key."""
         key_file_path = Path("/etc/slurm/slurm.jwks")
         sentinel_content = {
             "keys": [{"alg": "HS256", "kty": "oct", "kid": "sentinel", "k": "c2VudGluZWw="}]
@@ -510,12 +445,7 @@ class TestSlurmrestdCharm:
         expected,
         leader,
     ) -> None:
-        """Test the status surface evaluated by `check_slurmrestd` after every handler.
-
-        Failure mode: these statuses are what operators diagnose outages from. A
-        wrong branch here misleads operators, e.g. showing "waiting" while the
-        service is actually broken.
-        """
+        """Test `check_slurmrestd` reports blocked, waiting, or active status for each installed/joined/active combination."""
         integration = (
             testing.Relation(
                 endpoint=SLURMRESTD_INTEGRATION_NAME,
