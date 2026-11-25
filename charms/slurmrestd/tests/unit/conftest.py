@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Configure unit tests for the `slurmctld` charm."""
+"""Configure unit tests for the `slurmrestd` charmed operator."""
 
 import pytest
 from charm import SlurmrestdCharm
@@ -23,7 +23,7 @@ from pytest_mock import MockerFixture
 
 @pytest.fixture(scope="function")
 def mock_ctx() -> testing.Context[SlurmrestdCharm]:
-    """Mock `SlurmrestdCharm`."""
+    """Mock `SlurmrestdCharm` context."""
     return testing.Context(SlurmrestdCharm)
 
 
@@ -31,9 +31,16 @@ def mock_ctx() -> testing.Context[SlurmrestdCharm]:
 def mock_charm(
     mock_ctx, fs: FakeFilesystem, mocker: MockerFixture
 ) -> testing.Context[SlurmrestdCharm]:
-    """Mock `SlurmrestdCharm` context with fake filesystem."""
+    """Mock `SlurmrestdCharm` context with fake filesystem.
+
+    Warnings:
+        - The mock charm context must come before the fake filesystem fixture,
+          otherwise `ops.testing.Context` will fail to locate the `slurmrestd` charm's
+          charmcraft.yaml file.
+    """
     fs.create_file("/etc/slurm/slurm.jwks", create_missing_dirs=True)
     fs.create_file("/etc/default/slurmrestd", create_missing_dirs=True)
+    mocker.patch("shutil.chown")  # User/group `slurm` doesn't exist on host.
     mocker.patch("subprocess.run")
 
     return mock_ctx
